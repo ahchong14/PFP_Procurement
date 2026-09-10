@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "ZI5f7Z8Yp3E=",
+  "success": true,
+  "projectFilePath": "D:\\asiasoft_project\\pfp\\PFP.Procurement\\PFP.Host\\PFP.Host.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\user\\.nuget\\packages\\microsoft.aspnetcore.openapi\\11.0.0-rc.1.26425.128\\microsoft.aspnetcore.openapi.11.0.0-rc.1.26425.128.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\microsoft.openapi\\3.10.0\\microsoft.openapi.3.10.0.nupkg.sha512"
+  ],
+  "logs": []
+}
