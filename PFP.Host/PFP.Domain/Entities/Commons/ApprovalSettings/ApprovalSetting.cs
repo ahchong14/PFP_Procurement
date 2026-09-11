@@ -1,8 +1,9 @@
 ﻿using PFP.Host.PFP.Domain.Enums;
+using PFP.Host.PFP.Domain.Interface;
 
 namespace PFP.Host.PFP.Domain.Entities.Commons.ApprovalSettings
 {
-    public class ApprovalSetting
+    public class ApprovalSetting : IBaseEntity, IBaseExposableEntity
     {
         public ApprovalLevel level { get; set; }
 

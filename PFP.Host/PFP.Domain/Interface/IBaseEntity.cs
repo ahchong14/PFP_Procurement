@@ -1,7 +1,6 @@
 ﻿namespace PFP.Host.PFP.Domain.Interface
 {
-    public interface IEntity
+    public interface IBaseEntity
     {
-        int Id { get; }
     }
 }

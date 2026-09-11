@@ -1,13 +1,23 @@
-﻿namespace PFP.Host.PFP.Domain.Entities.Commons.RequestQuotations
+﻿using PFP.Host.PFP.Domain.Entities.Commons.RequestQuotations;
+using PFP.Host.PFP.Domain.Interface;
+namespace PFP.Host.PFP.Domain.Entities.Commons.RequestQuotationDetails
+
 {
-    public class RequestQuotation
+    public class RequestQuotationDetail : IBaseEntity
     {
         public int Id { get; set; }
 
-        public string DocNo { get; set; } = string.Empty;
+        public required int RequestQuotationId { get; set; }
 
-        public int PurchaseRequestId { get; set; } = 0;
+        public required RequestQuotation RequestQuotation { get; set; }
 
-        public int SupplierId { get; set; } = 0;
+        public required string ItemCode { get; set; }
+        public required string Description { get; set; }
+
+        public required string Uom { get; set; }
+
+        public decimal Qty { get; set; }
+
+        public decimal UnitPrice { get; set; }
     }
 }

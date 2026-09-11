@@ -1,17 +1,22 @@
-﻿using PFP.Host.PFP.Domain.Entities.Commons.Suppliers;
+﻿using PFP.Host.PFP.Domain.Entities.Commons.PurchaseRequests;
+using PFP.Host.PFP.Domain.Entities.Commons.SupplierQuoteDetails;
+using PFP.Host.PFP.Domain.Entities.Commons.Suppliers;
 using PFP.Host.PFP.Domain.Enums;
+using PFP.Host.PFP.Domain.Interface;
 
 namespace PFP.Host.PFP.Domain.Entities.Commons.SupplierQuoteCopys
 {
-    public class SupplierQuoteCopy
+    public class SupplierQuoteCopy : IBaseEntity, IBaseExposableEntity
     {
         public int Id { get; set; }
 
-        public int PurchaseRequestId { get; set; } = 0;
+        public required int PurchaseRequestId { get; set; } = 0;
 
-        public int SupplierId { get; set; } = 0;
+        public required PurchaseRequest PurchaseRequest { get; set; } = default!;
 
-        public Supplier Supplier { get; set; } = null!;
+        public required int SupplierId { get; set; } = 0;
+
+        public required Supplier Supplier { get; set; } = default!;
 
         public string Token { get; set; } = string.Empty;
 
@@ -38,5 +43,7 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.SupplierQuoteCopys
             SubmittedAt = DateTime.UtcNow;
 
         }
+
+        public ICollection<SupplierQuoteDetail> SupplierQuoteDetails { get; set; } = new List<SupplierQuoteDetail>();
     }
 }

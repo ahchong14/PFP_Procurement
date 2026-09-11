@@ -3,7 +3,7 @@ using PFP.Host.PFP.Domain.Interface;
 
 namespace PFP.Host.PFP.Domain.Entities.Commons.Suppliers
 {
-    public class Supplier : IEntity
+    public class Supplier : IEntity, IBaseEntity, IExposableEntity, IBaseExposableEntity
     {
         /// <summary>
         /// Gets or sets the unique identifier for the supplier.
