@@ -1,0 +1,9 @@
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\PFP.Host.csproj.AssemblyReference.cache
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\rpswa.dswa.cache.json
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\PFP.Host.GeneratedMSBuildEditorConfig.editorconfig
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\PFP.Host.AssemblyInfoInputs.cache
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\PFP.Host.AssemblyInfo.cs
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\PFP.Host.csproj.CoreCompileInputs.cache
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\PFP.Host.MvcApplicationPartsAssemblyInfo.cs
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\PFP.Host.MvcApplicationPartsAssemblyInfo.cache
+D:\asiasoft_project\pfp\PFP.Procurement\PFP.Host\obj\Debug\net11.0\PFP.Host.sourcelink.json

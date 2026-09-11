@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PFP.Host")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+478c084621e14e0572f478ca44d2e268409ff4ee")]
 [assembly: System.Reflection.AssemblyProductAttribute("PFP.Host")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PFP.Host")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

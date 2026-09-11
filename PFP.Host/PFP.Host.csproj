@@ -10,4 +10,12 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="11.0.0-rc.1.26425.128" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="PFP.Domain\bin\Debug\net10.0\de\" />
+    <Folder Include="PFP.Domain\bin\Debug\net10.0\es\" />
+    <Folder Include="PFP.Domain\bin\Debug\net10.0\ja\" />
+    <Folder Include="PFP.Domain\bin\Release\net10.0\" />
+    <Folder Include="PFP.Domain\bin\Release\net11.0\" />
+  </ItemGroup>
+
 </Project>

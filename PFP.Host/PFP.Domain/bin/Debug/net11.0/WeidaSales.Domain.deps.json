@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v11.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v11.0": {
+      "WeidaSales.Domain/1.0.0": {
+        "dependencies": {
+          "WeidaSales.Shared": "1.0.0"
+        },
+        "runtime": {
+          "WeidaSales.Domain.dll": {}
+        }
+      },
+      "WeidaSales.Shared/1.0.0": {
+        "runtime": {
+          "WeidaSales.Shared.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "WeidaSales.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "WeidaSales.Shared/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
