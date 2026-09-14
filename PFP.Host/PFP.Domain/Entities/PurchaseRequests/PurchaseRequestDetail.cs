@@ -10,9 +10,9 @@ namespace PFP.Host.PFP.Domain.Entities.PurchaseRequests
 
         public required PurchaseRequest PurchaseRequest { get; set; } = default!;
 
-        public string ItemCode { get; set; } = string.Empty;
+        public required string ItemCode { get; set; }
 
-        public string Description { get; set; } = string.Empty;
+        public string? Description { get; set; }
 
         public string? Location { get; set; }
 

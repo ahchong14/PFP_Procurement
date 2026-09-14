@@ -57,14 +57,14 @@ namespace PFP.Host.PFP.Domain.Entities.RequestQuotations
         /// <summary>
         /// A collection of RequestQuotationDetail entities associated with the RequestQuotation. Each RequestQuotationDetail represents an individual item or service being quoted, including its description, quantity, unit price, and total price. This collection allows for detailed tracking of all items included in the quotation.
         /// </summary>
-        public ICollection<RequestQuotationDetail> RequestQuotationDetails { get; set; } = [];
+        public ICollection<RequestQuotationDetail> Items { get; set; } = [];
         /// <summary>
         /// A collection of RQApproval entities associated with the RequestQuotation. Each RQApproval represents an approval action taken on the quotation, including the approver's information, approval status, and any comments provided. This collection allows for tracking the approval history and workflow of the quotation.
         /// </summary>
         public ICollection<RQApproval> Approvals { get; set; } = [];
         /// <summary>
-        /// 
+        /// A c
         /// </summary>
-        public ICollection<PurchaseOrder> PurchaseOrders { get; set; } = [];
+        public ICollection<PurchaseOrder> PurchaseOrder { get; set; } = [];
     }
 }

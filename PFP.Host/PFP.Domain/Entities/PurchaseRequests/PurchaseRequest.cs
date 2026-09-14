@@ -17,8 +17,7 @@ namespace PFP.Host.PFP.Domain.Entities.PurchaseRequests
 
         public required User Requester { get; set; } = default!;
 
-        public Department Department { get; set; } = Department.Office;
-
+        public string Department { get; set; } = null!;
         public PRStatus Status { get; set; } = PRStatus.Quoting;
 
         public string? PmRemarks { get; set; }

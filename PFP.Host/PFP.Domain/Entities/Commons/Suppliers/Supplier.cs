@@ -10,7 +10,7 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.Suppliers
         /// <summary>
         /// Unique identifier for the supplier.
         /// </summary>
-        public int Id { get; set; }
+        public required int Id { get; set; }
         /// <summary>
         /// Name of the supplier.
         /// </summary>
@@ -47,8 +47,6 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.Suppliers
         /// The hashed password for the supplier's account.
         /// </summary>
         public string? PasswordHash { get; set; }
-
-        public ICollection<Supplier> Suppliers { get; set; } = [];
 
         public ICollection<RequestQuotation> RequestQuotations { get; set; } = [];
 

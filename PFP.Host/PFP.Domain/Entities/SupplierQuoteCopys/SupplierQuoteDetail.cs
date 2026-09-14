@@ -12,7 +12,7 @@ namespace PFP.Host.PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>
         /// The identifier of the associated SupplierQuoteCopy entity.
         /// </summary>
-        public int SupplierQuoteCopyId { get; set; } = 0;
+        public int SupplierQuoteCopyId { get; set; }
         /// <summary>
         /// The associated SupplierQuoteCopy entity.
         /// </summary>
@@ -20,7 +20,7 @@ namespace PFP.Host.PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>   
         /// The identifier of the associated PurchaseRequestItem entity.
         /// </summary>
-        public int PurchaseRequestItemId { get; set; } = 0;
+        public int PurchaseRequestItemId { get; set; }
         /// <summary>
         /// The associated PurchaseRequest entity.
         /// </summary>
@@ -28,6 +28,6 @@ namespace PFP.Host.PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>
         /// The unit price of the item in the supplier quote.
         /// </summary>
-        public decimal UnitPrice { get; set; } = 0;
+        public decimal UnitPrice { get; set; }
     }
 }

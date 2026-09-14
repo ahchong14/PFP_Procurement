@@ -14,7 +14,7 @@ namespace PFP.Host.PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>
         /// The identifier of the associated PurchaseRequest entity.
         /// </summary>
-        public required int PurchaseRequestId { get; set; } = 0;
+        public required int PurchaseRequestId { get; set; }
         /// <summary>
         /// The associated PurchaseRequest entity.
         /// </summary>
@@ -22,7 +22,7 @@ namespace PFP.Host.PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>
         /// The identifier of the associated Supplier entity.
         /// </summary>
-        public required int SupplierId { get; set; } = 0;
+        public required int SupplierId { get; set; }
         /// <summary>
         /// The associated Supplier entity.
         /// </summary>
@@ -42,7 +42,7 @@ namespace PFP.Host.PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>
         /// The total amount quoted by the supplier in the SupplierQuoteCopy entity.
         /// </summary>
-        public decimal TotalAmount { get; set; } = 0m;
+        public decimal TotalAmount { get; set; }
         /// <summary>
         /// The date and time when the SupplierQuoteCopy entity was sent to the supplier.
         /// </summary>

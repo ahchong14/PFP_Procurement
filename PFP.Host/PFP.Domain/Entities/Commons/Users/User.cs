@@ -28,7 +28,7 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.Users
         /// <summary>
         /// Department of the user.   
         /// </summary>
-        public Department? Department { get; set; } = null;
+        public string Department { get; set; } = null!;
         /// <summary>
         /// Value indicating whether the user is active or not.
         /// </summary>
@@ -40,7 +40,7 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.Users
         /// <summary>
         /// The collection of purchase requests associated with the user.
         /// </summary>
-        public ICollection<PurchaseRequest> PurchaseRequests { get; set; } = new List<PurchaseRequest>();
+        public ICollection<PurchaseRequest> PurchaseRequests { get; set; } = [];
 
         public ICollection<RQApproval> RQApprovals { get; set; } = [];
     }

@@ -39,7 +39,7 @@ namespace PFP.Host.PFP.Domain.Entities.RequestQuotations
         /// <summary>
         /// The timestamp indicating when the approval action was taken for this RQApproval entity.
         /// </summary>
-        public DateTime Timestamp { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
     }
 }
