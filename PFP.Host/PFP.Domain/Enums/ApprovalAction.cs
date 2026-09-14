@@ -2,7 +2,7 @@
 {
     public enum ApprovalAction
     {
-        Approved = 0,
-        Rejected = 1
+        Approved,
+        Rejected
     }
 }

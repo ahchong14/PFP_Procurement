@@ -1,6 +1,6 @@
 ﻿namespace PFP.Host.PFP.Domain.Interface
 {
-    public interface IBaseExposableEntity
+    public interface IBaseExposableEntity : IBaseEntity, IExposableEntity
     {
     }
 }

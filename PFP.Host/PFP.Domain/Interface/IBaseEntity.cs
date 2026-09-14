@@ -1,6 +1,8 @@
-﻿namespace PFP.Host.PFP.Domain.Interface
+﻿using PFP.Host.PFP.Domain.Interface.Auditables;
+
+namespace PFP.Host.PFP.Domain.Interface
 {
-    public interface IBaseEntity
+    public interface IBaseEntity : IEntity, ICreationAuditable
     {
     }
 }

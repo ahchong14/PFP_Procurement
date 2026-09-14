@@ -1,8 +1,8 @@
-﻿using PFP.Host.PFP.Domain.Entities.Commons.PurchaseOrders;
+﻿using PFP.Host.PFP.Domain.Interface;
 
-namespace PFP.Host.PFP.Domain.Entities.Commons.PurchaseOrderDetails
+namespace PFP.Host.PFP.Domain.Entities.PurchaseOrders
 {
-    public class PurchaseOrderDetail
+    public class PurchaseOrderDetail : IEntity, IExposableEntity
     {
         public int Id { get; set; }
         public int PurchaseOrderId { get; set; }

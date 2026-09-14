@@ -1,10 +1,8 @@
-﻿using PFP.Host.PFP.Domain.Entities.Commons.PurchaseRequests;
-using PFP.Host.PFP.Domain.Entities.Commons.SupplierQuoteDetails;
-using PFP.Host.PFP.Domain.Interface;
+﻿using PFP.Host.PFP.Domain.Entities.SupplierQuoteCopys;
 
-namespace PFP.Host.PFP.Domain.Entities.Commons.PurchaseRequestDetails
+namespace PFP.Host.PFP.Domain.Entities.PurchaseRequests
 {
-    public class PurchaseRequestDetail : IBaseEntity
+    public class PurchaseRequestDetail
     {
         public int Id { get; set; }
 
@@ -22,6 +20,6 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.PurchaseRequestDetails
 
         public decimal Qty { get; set; } = 0;
 
-        public required ICollection<SupplierQuoteDetail> supplierQuoteDetails { get; set; } = new List<SupplierQuoteDetail>();
+        public required ICollection<SupplierQuoteDetail> QuotedBy { get; set; } = [];
     }
 }

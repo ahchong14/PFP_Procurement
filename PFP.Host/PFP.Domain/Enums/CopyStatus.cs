@@ -2,14 +2,8 @@
 {
     public enum Copystatus
     {
-        PendingL1,
+        Pending,
 
-        PendingL2,
-
-        Approved,
-
-        Rejected,
-
-        Converted
+        Submitted
     }
 }

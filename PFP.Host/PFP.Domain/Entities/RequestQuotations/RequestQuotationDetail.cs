@@ -1,9 +1,9 @@
-﻿using PFP.Host.PFP.Domain.Entities.Commons.RequestQuotations;
-using PFP.Host.PFP.Domain.Interface;
-namespace PFP.Host.PFP.Domain.Entities.Commons.RequestQuotationDetails
+﻿using PFP.Host.PFP.Domain.Interface;
+
+namespace PFP.Host.PFP.Domain.Entities.RequestQuotations
 
 {
-    public class RequestQuotationDetail : IBaseEntity
+    public class RequestQuotationDetail : IEntity, IExposableEntity
     {
         public int Id { get; set; }
 

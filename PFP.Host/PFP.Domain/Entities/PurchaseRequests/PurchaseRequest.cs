@@ -1,11 +1,11 @@
-﻿using PFP.Host.PFP.Domain.Entities.Commons.PurchaseRequestDetails;
-using PFP.Host.PFP.Domain.Entities.Commons.SupplierQuoteCopys;
-using PFP.Host.PFP.Domain.Entities.Commons.Users;
+﻿using PFP.Host.PFP.Domain.Entities.Commons.Users;
+using PFP.Host.PFP.Domain.Entities.RequestQuotations;
+using PFP.Host.PFP.Domain.Entities.SupplierQuoteCopys;
 using PFP.Host.PFP.Domain.Enums;
 using PFP.Host.PFP.Domain.Interface;
 
 
-namespace PFP.Host.PFP.Domain.Entities.Commons.PurchaseRequests
+namespace PFP.Host.PFP.Domain.Entities.PurchaseRequests
 {
     public class PurchaseRequest : IBaseEntity, IBaseExposableEntity
     {
@@ -15,7 +15,7 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.PurchaseRequests
 
         public required int RequestedId { get; set; }
 
-        public required User User { get; set; } = default!;
+        public required User Requester { get; set; } = default!;
 
         public Department Department { get; set; } = Department.Office;
 
@@ -39,10 +39,12 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.PurchaseRequests
 
         public User? DecidedByUser { get; set; }
 
-        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+        public byte[] RowVersion { get; set; } = [];
 
-        public ICollection<PurchaseRequestDetail> PurchaseRequestDetails { get; set; } = new List<PurchaseRequestDetail>();
+        public ICollection<PurchaseRequestDetail> Items { get; set; } = [];
 
-        public ICollection<SupplierQuoteCopy> SupplierQuoteCopies { get; set; } = new List<SupplierQuoteCopy>();
+        public ICollection<SupplierQuoteCopy> SupplierQuoteCopies { get; set; } = [];
+
+        public ICollection<RequestQuotation> RequestQuotations { get; set; } = [];
     }
 }

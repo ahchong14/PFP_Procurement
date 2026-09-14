@@ -6,7 +6,7 @@
 
         Warehouse,
 
-        Site,
+        Site
 
 
     }

@@ -2,7 +2,10 @@
 {
     public enum RQStatus
     {
-        Pending = 0,
-        Submitted = 1,
+        PendingL1,
+        PendingL2,
+        Approved,
+        Rejected,
+        Converted
     }
 }
