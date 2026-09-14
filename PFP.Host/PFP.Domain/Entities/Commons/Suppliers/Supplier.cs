@@ -30,6 +30,11 @@ namespace PFP.Host.PFP.Domain.Entities.Commons.Suppliers
         /// Value indicating whether the supplier is included in auto-counting.
         /// </summary>
         public bool InAutoCount { get; set; }
+        /// <summary>
+        /// 
+        /// </summary>
+
+        public string? CreditorCode { get; set; }
 
         /// <summary>
         /// The account status of the supplier.

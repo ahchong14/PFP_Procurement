@@ -28,7 +28,7 @@ namespace PFP.Host.PFP.Domain.Entities.PurchaseOrders
 
         public DateTime? SyncedAt { get; set; }
 
-        public string? AutoCountPORRef { get; set; }
+        public string? AutoCountPORef { get; set; }
 
         public string? AutoCountCreditorRef { get; set; }
 
