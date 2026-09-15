@@ -2,5 +2,6 @@
 {
     public interface IDocumentNumberGenerator
     {
+        Task<string> NextAsync(string prefix, CancellationToken cancellationToken);
     }
 }
