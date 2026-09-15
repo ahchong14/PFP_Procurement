@@ -1,3 +1,5 @@
 <Solution>
+  <Project Path="PFP.Domain/PFP.Domain.csproj" />
+  <Project Path="PFP.Application/PFP.Application.csproj" />
   <Project Path="PFP.Host/PFP.Host.csproj" />
 </Solution>

@@ -1,8 +1,11 @@
 {
   "version": 2,
-  "dgSpecHash": "bg6wvJEvoJs=",
+  "dgSpecHash": "0L/ARyEpsis=",
   "success": true,
   "projectFilePath": "D:\\asiasoft_project\\pfp\\PFP.Procurement\\PFP.Application\\PFP.Application.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "C:\\Users\\user\\.nuget\\packages\\fluentvalidation\\12.1.1\\fluentvalidation.12.1.1.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\fluentvalidation.dependencyinjectionextensions\\12.1.1\\fluentvalidation.dependencyinjectionextensions.12.1.1.nupkg.sha512"
+  ],
   "logs": []
 }

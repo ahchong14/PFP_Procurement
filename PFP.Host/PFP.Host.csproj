@@ -10,4 +10,8 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="11.0.0-rc.1.26425.128" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\PFP.Application\PFP.Application.csproj" />
+  </ItemGroup>
+
 </Project>
