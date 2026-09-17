@@ -2,10 +2,9 @@
 {
     public enum Role
     {
-        Admin,
         Requester,
 
-        PurchaseManger,
+        PurchaseManager,
 
         DirectorL1,
 

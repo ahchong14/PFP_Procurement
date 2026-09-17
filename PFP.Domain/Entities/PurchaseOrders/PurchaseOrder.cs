@@ -1,5 +1,4 @@
 ﻿using PFP.Domain.Entities.Commons.Suppliers;
-using PFP.Domain.Entities.PurchaseRequests;
 using PFP.Domain.Entities.RequestQuotations;
 using PFP.Domain.Enums;
 using PFP.Domain.Interface;
@@ -38,6 +37,6 @@ namespace PFP.Domain.Entities.PurchaseOrders
 
         public required byte[] RowVersion { get; set; } = [];
 
-        public ICollection<PurchaseRequestDetail> Items { get; set; } = [];
+        public ICollection<PurchaseOrderDetail> Items { get; set; } = [];
     }
 }

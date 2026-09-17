@@ -4,7 +4,7 @@ using PFP.Domain.Enums;
 
 namespace PFP.Application.Features.Users.Commands.UpdateUserRole;
 
-[RequireRole(Role.Admin)]
+[RequireRole(Role.HeadOfPurchase)]
 public sealed record UpdateUserRoleCommand(
     int Id,
     Role Role
