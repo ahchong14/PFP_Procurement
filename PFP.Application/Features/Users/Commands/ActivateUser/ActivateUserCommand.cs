@@ -1,6 +1,6 @@
-﻿namespace PFP.Application.Features.Users.Commands.ActivateUser
+﻿using PFP.Application.Abstractions.Messaging;
+
+namespace PFP.Application.Features.Users.Commands.ActivateUser
 {
-    public class ActivateUserCommand
-    {
-    }
+    public sealed record ActivateUserCommand(int Id) : IRequest<UserDto>;
 }

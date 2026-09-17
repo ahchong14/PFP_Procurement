@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using PFP.Application.Abstractions.Messaging;
 using PFP.Application.Common.Behaviours;
+using PFP.Application.Internal.Messaging;
 
 namespace PFP.Application
 {

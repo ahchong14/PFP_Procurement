@@ -2,8 +2,6 @@
 using PFP.Domain.Entities.RequestQuotations;
 using PFP.Domain.Enums;
 using PFP.Domain.Interface;
-// TODO: add the using for the namespace that contains PurchaseRequest, for example:
-// using PFP.Domain.Entities.Commons.PurchaseRequests;
 
 namespace PFP.Domain.Entities.Commons.Users
 {
@@ -12,7 +10,7 @@ namespace PFP.Domain.Entities.Commons.Users
         /// <summary>
         /// Unique identifier for the user.
         /// </summary>
-        public required int Id { get; set; }
+        public int Id { get; set; }
         /// <summary>
         /// Name of the user.
         /// </summary>
@@ -26,9 +24,9 @@ namespace PFP.Domain.Entities.Commons.Users
         /// </summary>
         public Role Role { get; set; }
         /// <summary>
-        /// Department of the user.   
+        /// Department of the user. Only meaningful when Role is Requester.
         /// </summary>
-        public string Department { get; set; } = null!;
+        public required string Department { get; set; }
         /// <summary>
         /// Value indicating whether the user is active or not.
         /// </summary>

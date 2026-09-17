@@ -1,6 +1,8 @@
-﻿namespace PFP.Application.Features.Users.Queries.GetUsersById
+﻿using PFP.Application.Abstractions.Messaging;
+using PFP.Application.Common.Authorization;
+
+namespace PFP.Application.Features.Users.Queries.GetUsersById
 {
-    public class GetUserByIdQuery
-    {
-    }
+    [RequireRole(Domain.Enums.Role.HeadOfPurchase)]
+    public sealed record GetUserByIdQuery(int Id) : IRequest<UserDto>;
 }

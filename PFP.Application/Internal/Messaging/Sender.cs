@@ -1,6 +1,7 @@
-﻿using System.Collections.Concurrent;
+﻿using PFP.Application.Abstractions.Messaging;
+using System.Collections.Concurrent;
 
-namespace PFP.Application.Abstractions.Messaging;
+namespace PFP.Application.Internal.Messaging;
 
 public sealed class Sender(IServiceProvider serviceProvider) : ISender
 {
