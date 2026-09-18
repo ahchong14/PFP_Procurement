@@ -1,5 +1,6 @@
 <Solution>
-  <Project Path="PFP.Domain/PFP.Domain.csproj" />
   <Project Path="PFP.Application/PFP.Application.csproj" />
+  <Project Path="PFP.Domain/PFP.Domain.csproj" />
   <Project Path="PFP.Host/PFP.Host.csproj" />
+  <Project Path="PFP.Infrastructure/PFP.Infrastructure.csproj" Id="c7117fb3-fab0-45fd-b4c8-1f9e5edb4f46" />
 </Solution>

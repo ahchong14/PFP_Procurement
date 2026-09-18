@@ -1,4 +1,4 @@
-﻿namespace PFP.Application.Abstractions.Messaging;
+﻿namespace PFP.Application.Internal.Messaging;
 
 internal abstract class RequestHandlerBase
 {

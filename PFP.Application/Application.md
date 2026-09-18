@@ -416,19 +416,7 @@ Worked example: adding an "archive purchase request" operation.
 
 ---
 
-## 12. Known Deviations
-
-Discrepancies between the originally recorded design (`DATA-MODEL.md`) and the actual implementation, found while cross-checking this document against the real source files.
-
-| # | Area | Original design | Actual implementation | Status |
-|---|---|---|---|---|
-| 1 | `CreateUserCommand.Department` | Optional — only meaningful for the `Requester` role | `string`, required for every role | Open — decide whether to relax the field to optional or formally adopt the current required behavior |
-
-This table will grow as further modules move from scaffold to implementation and get cross-checked the same way.
-
----
-
-## 13. Project Dependencies
+## 12. Project Dependencies
 
 - `ProjectReference` → `PFP.Domain`
 - NuGet: `FluentValidation`, `FluentValidation.DependencyInjectionExtensions`
