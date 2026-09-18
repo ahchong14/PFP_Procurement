@@ -8,16 +8,9 @@
 | Depends on | `PFP.Domain` |
 | Depended on by | `PFP.Infrastructure`, `PFP.WebApi` (not yet created) |
 | Status | Foundation complete; `Users` module implemented; remaining 8 feature modules scaffolded only |
-| Audience | Backend maintainers, frontend integrators, incoming contributors |
+| Audience | Backend maintainers, incoming contributors |
 
-Enum definitions (`Role`, `PRStatus`, etc.) are documented in `PFP.Domain/Domain.md` and are not repeated here.
-
-### Document conventions
-
-| Marker | Meaning |
-|---|---|
-| ✅ | Verified against the actual source file in this repository |
-| ⚠️ | Design target only — the corresponding `Command`/`Query` is still an empty scaffold; fields shown are carried over from the reconciled Scope requirements and are subject to change once implemented |
+Enum definitions (`Role`, `PRStatus`, etc.) are documented in `PFP.Domain/Domain.md` and are not repeated here. The HTTP API contract (routes, request/response bodies, status codes) is a `PFP.WebApi` concern, not this layer's — it is documented in `pfp_project/DATA-MODEL.md` today and will move to `PFP.WebApi`'s own document once that project exists.
 
 ---
 
@@ -29,14 +22,12 @@ Enum definitions (`Role`, `PRStatus`, etc.) are documented in `PFP.Domain/Domain
 4. [Coding Conventions](#4-coding-conventions)
 5. [Architectural Decisions](#5-architectural-decisions)
 6. [Request Lifecycle](#6-request-lifecycle)
-7. [API Surface](#7-api-surface)
-8. [Error Response Format](#8-error-response-format)
-9. [Feature Module Catalog](#9-feature-module-catalog)
-10. [End-to-End Business Flow](#10-end-to-end-business-flow)
-11. [Adding a New Use Case](#11-adding-a-new-use-case)
-12. [Implementation Status](#12-implementation-status)
-13. [Known Deviations](#13-known-deviations)
-14. [Project Dependencies](#14-project-dependencies)
+7. [Feature Module Catalog](#7-feature-module-catalog)
+8. [End-to-End Business Flow](#8-end-to-end-business-flow)
+9. [Adding a New Use Case](#9-adding-a-new-use-case)
+10. [Implementation Status](#10-implementation-status)
+11. [Known Deviations](#11-known-deviations)
+12. [Project Dependencies](#12-project-dependencies)
 
 ---
 
@@ -254,132 +245,7 @@ sequenceDiagram
 
 ---
 
-## 7. API Surface
-
-This section documents the endpoint contract that `PFP.WebApi` will eventually expose. `PFP.WebApi` does not exist yet; nothing below can currently be called over HTTP. See the document-convention legend for what ✅/⚠️ mean.
-
-### Auth (no authentication required) ⚠️
-
-| Method | Path | Body | Response |
-|---|---|---|---|
-| POST | `/auth/login` | `{email, password}` | `AuthResultDto` (`accountType`: `"Internal"` \| `"Supplier"`) |
-| POST | `/auth/change-password` | `{oldPassword, newPassword}` | `204` |
-
-### Users (requires `HeadOfPurchase`) ✅
-
-| Method | Path | Body | Response |
-|---|---|---|---|
-| GET | `/users` | — | `UserDto[]` |
-| GET | `/users/{id}` | — | `UserDto` |
-| POST | `/users` | `{name, email, role, department, password}` | `UserDto` (201) |
-| POST | `/users/{id}/activate` | — | `UserDto` |
-| POST | `/users/{id}/deactivate` | — | `UserDto` |
-| PATCH | `/users/{id}` | `{role}` | `UserDto` |
-
-> See "Known Deviations" (below) — `department` is required, not optional, in the current implementation.
-
-### Suppliers ⚠️
-
-| Method | Path | Body | Response | Access |
-|---|---|---|---|---|
-| GET | `/suppliers` | — | `SupplierDto[]` | Internal session |
-| GET | `/suppliers/{id}` | — | `SupplierDto` | Internal session |
-| POST | `/suppliers` | `{name, email, contact?}` | `SupplierDto` (201) | PurchaseManager / HeadOfPurchase |
-| POST | `/suppliers/sync-autocount` | — | `SupplierDto[]` | PurchaseManager / HeadOfPurchase |
-| POST | `/suppliers/{id}/invite` | — | `SupplierDto` | PurchaseManager / HeadOfPurchase |
-| GET | `/suppliers/register/{registrationToken}` | — | `{name, email}` | None (public) |
-| POST | `/suppliers/register/{registrationToken}` | `{contact?, password}` | `SupplierDto` | None (public) |
-| GET | `/suppliers/me/quotes` | — | `SupplierQuoteCopyDto[]` | Supplier session |
-
-### Items ⚠️
-
-| Method | Path | Body | Response | Access |
-|---|---|---|---|---|
-| GET | `/items` | — | `ItemDto[]` | Internal session |
-| GET | `/items/{id}` | — | `ItemDto` | Internal session |
-| POST | `/items/sync-autocount` | — | `ItemDto[]` | PurchaseManager / HeadOfPurchase |
-
-### Approval Settings ⚠️
-
-| Method | Path | Body | Response | Access |
-|---|---|---|---|---|
-| GET | `/approval-settings` | — | `ApprovalSettingDto[]` | Internal session |
-| PUT | `/approval-settings` | `{settings:[{level,approverRole,minAmount,maxAmount}]}` | `ApprovalSettingDto[]` | HeadOfPurchase |
-
-### Purchase Requests ⚠️
-
-| Method | Path | Body | Response | Access |
-|---|---|---|---|---|
-| POST | `/purchase-requests` | `{department, items:[{itemCode,description,uom,qty,location?}], supplierIds(1-3)}` | `PurchaseRequestDto` (201) | Requester |
-| GET | `/purchase-requests` | — | `PurchaseRequestDto[]` | Internal session (`Requester` sees only their own) |
-| GET | `/purchase-requests/{id}` | — | `PurchaseRequestDto` | Same as above |
-| POST | `/purchase-requests/{id}/approve` | `{selectedSupplierCopyId, remark?}` | `RequestQuotationDto` | PurchaseManager |
-| POST | `/purchase-requests/{id}/reject` | `{remark?}` | `PurchaseRequestDto` | PurchaseManager |
-
-### Supplier Quotes (no authentication, token-based access) ⚠️
-
-| Method | Path | Body | Response |
-|---|---|---|---|
-| GET | `/supplier-quotes/{token}` | — | `SupplierQuoteViewDto` |
-| POST | `/supplier-quotes/{token}/submit` | `{items:[{purchaseRequestItemId,unitPrice}], remark?}` | `SubmitSupplierQuoteResultDto` (409 on resubmission) |
-
-### Request Quotations ⚠️
-
-| Method | Path | Body | Response | Access |
-|---|---|---|---|---|
-| GET | `/request-quotations` | — | `RequestQuotationDto[]` | Internal session |
-| GET | `/request-quotations/{id}` | — | `RequestQuotationDto` | Internal session |
-| POST | `/request-quotations/{id}/approve` | `{level, remark?}` | `RequestQuotationDto` | Data-driven — resolved against `ApprovalSetting.ApproverRole` |
-| POST | `/request-quotations/{id}/reject` | `{level, remark?}` | `RequestQuotationDto` | Same as above |
-| POST | `/request-quotations/{id}/convert-to-po` | — | `PurchaseOrderDto` (409 on repeat) | DirectorL1 / DirectorL2 |
-
-### Purchase Orders ⚠️
-
-| Method | Path | Body | Response | Access |
-|---|---|---|---|---|
-| GET | `/purchase-orders` | — | `PurchaseOrderDto[]` | Internal session |
-| GET | `/purchase-orders/{id}` | — | `PurchaseOrderDto` | Internal session |
-| POST | `/purchase-orders/{id}/sync-autocount` | — | `PurchaseOrderDto` (409 if already synced) | PurchaseManager / HeadOfPurchase |
-
-### Documentation Endpoints
-
-| Path | Description |
-|---|---|
-| `/openapi/v1.json` | Raw OpenAPI document |
-| `/scalar/v1` | Scalar interactive documentation and test console |
-
----
-
-## 8. Error Response Format
-
-Each exception in `Common/Exceptions/` is intended to be caught by a WebApi exception middleware (not yet built) and translated into the corresponding HTTP status code:
-
-| Exception | Status | Trigger |
-|---|---|---|
-| `UnauthorizedException` | 401 | Unauthenticated caller on an endpoint that requires a session |
-| `ForbiddenException` | 403 | Authenticated, but the caller's role does not permit this operation |
-| `NotFoundException` | 404 | Referenced id does not exist |
-| `AlreadySubmittedException` | 409 | Duplicate submission (e.g. a supplier quote submitted twice) |
-| `ValidationException` | 400 | Malformed request body (missing/invalid fields) |
-| `BusinessRuleException` | 400 | Business rule violation (e.g. email already registered) |
-| `IntegrationException` | 502 | An upstream system (AutoCount) call failed |
-
-`ValidationException` carries an `errors` dictionary keyed by field name, intended for per-field display on the client:
-
-```json
-{
-  "errors": {
-    "Email": ["'Email' is not a valid email address."],
-    "Password": ["'Password' must be at least 8 characters."]
-  }
-}
-```
-
-The response body shape for the other exception types (e.g. whether the project adopts `ProblemDetails`) is not yet finalized and will be settled when `ExceptionHandlingMiddleware.cs` is written.
-
----
-
-## 9. Feature Module Catalog
+## 7. Feature Module Catalog
 
 | Module | Commands | Queries |
 |---|---|---|
@@ -397,7 +263,7 @@ Commands marked *(internal)* are never invoked directly by an Endpoint: `CreateF
 
 ---
 
-## 10. End-to-End Business Flow
+## 8. End-to-End Business Flow
 
 The Scope Document's "Full Flow" section, mapped onto the actual Command names from the table above — this is the diagram to hand someone who knows the business process but not yet the codebase, or vice versa.
 
@@ -426,7 +292,7 @@ The branch at the first diamond (`J`: approved at L1 alone, going straight to `C
 
 ---
 
-## 11. Adding a New Use Case
+## 9. Adding a New Use Case
 
 Worked example: adding an "archive purchase request" operation.
 
@@ -440,7 +306,7 @@ Worked example: adding an "archive purchase request" operation.
 
 ---
 
-## 12. Implementation Status
+## 10. Implementation Status
 
 | Component | Status |
 |---|---|
@@ -453,11 +319,11 @@ Worked example: adding an "archive purchase request" operation.
 | `PFP.Infrastructure` | Project created; `DbContext` and two of fourteen `Configuration` files implemented — see `PFP.Infrastructure/Infrastructure.md` for the current detail |
 | `PFP.WebApi` (Endpoints, `Program.cs` wiring) | Not yet created |
 
-**For frontend integrators**: the API surface in Section 7 is the target contract, not a description of what is currently callable. No HTTP layer exists yet — `PFP.WebApi` has not been created — so no endpoint in this document can be invoked today. The only feature with a fully working chain from repository interface to Handler is `Users`.
+No HTTP layer exists yet — `PFP.WebApi` has not been created — so nothing in this project can be invoked over HTTP today, regardless of what `pfp_project/DATA-MODEL.md`'s API route table says is planned. The only feature with a fully working chain from repository interface to Handler is `Users`.
 
 ---
 
-## 13. Known Deviations
+## 11. Known Deviations
 
 Discrepancies between the originally recorded design (`DATA-MODEL.md`) and the actual implementation, found while cross-checking this document against the real source files.
 
@@ -469,7 +335,7 @@ This table will grow as further modules move from scaffold to implementation and
 
 ---
 
-## 14. Project Dependencies
+## 12. Project Dependencies
 
 - `ProjectReference` → `PFP.Domain`
 - NuGet: `FluentValidation`, `FluentValidation.DependencyInjectionExtensions`

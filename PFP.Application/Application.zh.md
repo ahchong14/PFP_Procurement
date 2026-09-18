@@ -8,16 +8,9 @@
 | 依赖 | `PFP.Domain` |
 | 被谁依赖 | `PFP.Infrastructure`、`PFP.WebApi`（均未建立） |
 | 状态 | 基础设施部分已完成；`Users`模块已实现；其余8个模块仅有骨架 |
-| 读者 | 后端维护者、前端对接人员、后续接手的开发者 |
+| 读者 | 后端维护者、后续接手的开发者 |
 
-本文档为英文版`Application.md`的中文对照版本，内容保持一致。枚举定义（`Role`、`PRStatus`等）记录在`PFP.Domain/Domain.zh.md`，本文档不重复。
-
-### 文档约定
-
-| 标记 | 含义 |
-|---|---|
-| 已实现 | 已对照本仓库真实源码核对过 |
-| 设计目标 | 对应的`Command`/`Query`目前仍是空壳，下面列出的字段来自已核对过的Scope需求记录，实现时可能变化 |
+本文档为英文版`Application.md`的中文对照版本，内容保持一致。枚举定义（`Role`、`PRStatus`等）记录在`PFP.Domain/Domain.zh.md`，本文档不重复。HTTP API契约（路由、请求/响应体、状态码）是`PFP.WebApi`层的事，不属于这一层——现在记录在`pfp_project/DATA-MODEL.md`，等`PFP.WebApi`项目建立之后会搬到它自己的文档里。
 
 ---
 
@@ -29,14 +22,12 @@
 4. [编码规范](#4-编码规范)
 5. [架构决策](#5-架构决策)
 6. [请求生命周期](#6-请求生命周期)
-7. [API接口清单](#7-api接口清单)
-8. [错误响应格式](#8-错误响应格式)
-9. [Features模块清单](#9-features模块清单)
-10. [端到端业务流程](#10-端到端业务流程)
-11. [如何新增一个用例](#11-如何新增一个用例)
-12. [实现状态](#12-实现状态)
-13. [已知偏差](#13-已知偏差)
-14. [项目依赖](#14-项目依赖)
+7. [Features模块清单](#7-features模块清单)
+8. [端到端业务流程](#8-端到端业务流程)
+9. [如何新增一个用例](#9-如何新增一个用例)
+10. [实现状态](#10-实现状态)
+11. [已知偏差](#11-已知偏差)
+12. [项目依赖](#12-项目依赖)
 
 ---
 
@@ -254,132 +245,7 @@ sequenceDiagram
 
 ---
 
-## 7. API接口清单
-
-本节记录`PFP.WebApi`最终会暴露的接口契约。`PFP.WebApi`目前还不存在，下面列出的接口现在都无法通过HTTP调用。标记含义见文档开头的"文档约定"。
-
-### Auth（免登录）—— 设计目标
-
-| Method | Path | Body | 返回 |
-|---|---|---|---|
-| POST | `/auth/login` | `{email, password}` | `AuthResultDto`（`accountType`区分`"Internal"` / `"Supplier"`） |
-| POST | `/auth/change-password` | `{oldPassword, newPassword}` | `204` |
-
-### Users（需要`HeadOfPurchase`）—— 已实现
-
-| Method | Path | Body | 返回 |
-|---|---|---|---|
-| GET | `/users` | — | `UserDto[]` |
-| GET | `/users/{id}` | — | `UserDto` |
-| POST | `/users` | `{name, email, role, department, password}` | `UserDto`（201） |
-| POST | `/users/{id}/activate` | — | `UserDto` |
-| POST | `/users/{id}/deactivate` | — | `UserDto` |
-| PATCH | `/users/{id}` | `{role}` | `UserDto` |
-
-> 参见第12节"已知偏差"——`department`在当前实现里是必填的，不是可选的。
-
-### Suppliers —— 设计目标
-
-| Method | Path | Body | 返回 | 权限 |
-|---|---|---|---|---|
-| GET | `/suppliers` | — | `SupplierDto[]` | 内部登录 |
-| GET | `/suppliers/{id}` | — | `SupplierDto` | 内部登录 |
-| POST | `/suppliers` | `{name, email, contact?}` | `SupplierDto`（201） | PurchaseManager / HeadOfPurchase |
-| POST | `/suppliers/sync-autocount` | — | `SupplierDto[]` | PurchaseManager / HeadOfPurchase |
-| POST | `/suppliers/{id}/invite` | — | `SupplierDto` | PurchaseManager / HeadOfPurchase |
-| GET | `/suppliers/register/{registrationToken}` | — | `{name, email}` | 免登录 |
-| POST | `/suppliers/register/{registrationToken}` | `{contact?, password}` | `SupplierDto` | 免登录 |
-| GET | `/suppliers/me/quotes` | — | `SupplierQuoteCopyDto[]` | 供应商登录态 |
-
-### Items —— 设计目标
-
-| Method | Path | Body | 返回 | 权限 |
-|---|---|---|---|---|
-| GET | `/items` | — | `ItemDto[]` | 内部登录 |
-| GET | `/items/{id}` | — | `ItemDto` | 内部登录 |
-| POST | `/items/sync-autocount` | — | `ItemDto[]` | PurchaseManager / HeadOfPurchase |
-
-### Approval Settings —— 设计目标
-
-| Method | Path | Body | 返回 | 权限 |
-|---|---|---|---|---|
-| GET | `/approval-settings` | — | `ApprovalSettingDto[]` | 内部登录 |
-| PUT | `/approval-settings` | `{settings:[{level,approverRole,minAmount,maxAmount}]}` | `ApprovalSettingDto[]` | HeadOfPurchase |
-
-### Purchase Requests —— 设计目标
-
-| Method | Path | Body | 返回 | 权限 |
-|---|---|---|---|---|
-| POST | `/purchase-requests` | `{department, items:[{itemCode,description,uom,qty,location?}], supplierIds(1-3)}` | `PurchaseRequestDto`（201） | Requester |
-| GET | `/purchase-requests` | — | `PurchaseRequestDto[]` | 内部登录（`Requester`只看自己发起的） |
-| GET | `/purchase-requests/{id}` | — | `PurchaseRequestDto` | 同上 |
-| POST | `/purchase-requests/{id}/approve` | `{selectedSupplierCopyId, remark?}` | `RequestQuotationDto` | PurchaseManager |
-| POST | `/purchase-requests/{id}/reject` | `{remark?}` | `PurchaseRequestDto` | PurchaseManager |
-
-### Supplier Quotes（免登录，token访问）—— 设计目标
-
-| Method | Path | Body | 返回 |
-|---|---|---|---|
-| GET | `/supplier-quotes/{token}` | — | `SupplierQuoteViewDto` |
-| POST | `/supplier-quotes/{token}/submit` | `{items:[{purchaseRequestItemId,unitPrice}], remark?}` | `SubmitSupplierQuoteResultDto`（重复提交返回409） |
-
-### Request Quotations —— 设计目标
-
-| Method | Path | Body | 返回 | 权限 |
-|---|---|---|---|---|
-| GET | `/request-quotations` | — | `RequestQuotationDto[]` | 内部登录 |
-| GET | `/request-quotations/{id}` | — | `RequestQuotationDto` | 内部登录 |
-| POST | `/request-quotations/{id}/approve` | `{level, remark?}` | `RequestQuotationDto` | 动态——按`ApprovalSetting.ApproverRole`判定 |
-| POST | `/request-quotations/{id}/reject` | `{level, remark?}` | `RequestQuotationDto` | 同上 |
-| POST | `/request-quotations/{id}/convert-to-po` | — | `PurchaseOrderDto`（重复调用409） | DirectorL1 / DirectorL2 |
-
-### Purchase Orders —— 设计目标
-
-| Method | Path | Body | 返回 | 权限 |
-|---|---|---|---|---|
-| GET | `/purchase-orders` | — | `PurchaseOrderDto[]` | 内部登录 |
-| GET | `/purchase-orders/{id}` | — | `PurchaseOrderDto` | 内部登录 |
-| POST | `/purchase-orders/{id}/sync-autocount` | — | `PurchaseOrderDto`（已同步再调用返回409） | PurchaseManager / HeadOfPurchase |
-
-### 文档端点
-
-| Path | 说明 |
-|---|---|
-| `/openapi/v1.json` | 原始OpenAPI文档 |
-| `/scalar/v1` | Scalar交互式文档和测试界面 |
-
----
-
-## 8. 错误响应格式
-
-`Common/Exceptions/`里的每个异常都会被WebApi异常中间件（未建立）捕获、转成对应的HTTP状态码：
-
-| 异常 | 状态码 | 触发场景 |
-|---|---|---|
-| `UnauthorizedException` | 401 | 未登录调用需要登录态的接口 |
-| `ForbiddenException` | 403 | 已登录，但角色不允许这个操作 |
-| `NotFoundException` | 404 | 查询的id不存在 |
-| `AlreadySubmittedException` | 409 | 重复提交（比如供应商报价交过一次又交一次） |
-| `ValidationException` | 400 | 请求体格式不对（必填字段缺失或格式错误） |
-| `BusinessRuleException` | 400 | 违反业务规则（比如Email已被注册） |
-| `IntegrationException` | 502 | 外部系统（AutoCount）调用失败 |
-
-`ValidationException`的响应体带一个按字段名分组的`errors`字典，方便客户端逐字段展示：
-
-```json
-{
-  "errors": {
-    "Email": ["'Email' is not a valid email address."],
-    "Password": ["'Password' must be at least 8 characters."]
-  }
-}
-```
-
-其它异常类型的响应体格式（是否采用标准的`ProblemDetails`）尚未最终确定，会在`ExceptionHandlingMiddleware.cs`真正写的时候定下来。
-
----
-
-## 9. Features模块清单
+## 7. Features模块清单
 
 | 模块 | Commands | Queries |
 |---|---|---|
@@ -397,7 +263,7 @@ sequenceDiagram
 
 ---
 
-## 10. 端到端业务流程
+## 8. 端到端业务流程
 
 把Scope文档"Full Flow"那一节，对照上面那张表映射到真实的Command名字——这张图适合拿给"懂业务流程但还不熟悉代码"的人看，反过来给"熟悉代码但还没理清业务全貌"的人看也一样合适。
 
@@ -426,7 +292,7 @@ flowchart TD
 
 ---
 
-## 11. 如何新增一个用例
+## 9. 如何新增一个用例
 
 以新增"归档PR"操作为例：
 
@@ -440,7 +306,7 @@ flowchart TD
 
 ---
 
-## 12. 实现状态
+## 10. 实现状态
 
 | 部分 | 状态 |
 |---|---|
@@ -453,11 +319,11 @@ flowchart TD
 | `PFP.Infrastructure` | 项目已建立；`DbContext`和14个`Configuration`文件里的2个已实现——具体进度见`PFP.Infrastructure/Infrastructure.zh.md` |
 | `PFP.WebApi`（Endpoints、`Program.cs`接线） | 尚未建立 |
 
-**给前端的提醒**：第7节的API接口清单是目标契约，不代表现在能调通。`PFP.WebApi`还不存在，目前没有任何HTTP层，本文档里的接口现在都无法被调用。唯一从Repository接口到Handler完整跑通的功能是`Users`。
+`PFP.WebApi`还不存在，目前没有任何HTTP层——不管`pfp_project/DATA-MODEL.md`那份API路由表里写的是什么，这个项目现在没有任何东西能通过HTTP被调用。唯一从Repository接口到Handler完整跑通的功能是`Users`。
 
 ---
 
-## 13. 已知偏差
+## 11. 已知偏差
 
 原始设计记录（`DATA-MODEL.md`）和实际实现之间的差异，是在对照真实源码核对本文档时发现的。
 
@@ -469,7 +335,7 @@ flowchart TD
 
 ---
 
-## 14. 项目依赖
+## 12. 项目依赖
 
 - `ProjectReference` -> `PFP.Domain`
 - NuGet：`FluentValidation`、`FluentValidation.DependencyInjectionExtensions`

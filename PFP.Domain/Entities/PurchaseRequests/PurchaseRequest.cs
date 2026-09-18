@@ -44,6 +44,6 @@ namespace PFP.Domain.Entities.PurchaseRequests
 
         public ICollection<SupplierQuoteCopy> SupplierQuoteCopies { get; set; } = [];
 
-        public ICollection<RequestQuotation> RequestQuotations { get; set; } = [];
+        public ICollection<RequestQuotation?> RequestQuotations { get; set; } = [];
     }
 }

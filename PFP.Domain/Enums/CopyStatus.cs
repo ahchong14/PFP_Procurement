@@ -1,6 +1,6 @@
 ﻿namespace PFP.Domain.Enums
 {
-    public enum Copystatus
+    public enum CopyStatus
     {
         Pending,
 

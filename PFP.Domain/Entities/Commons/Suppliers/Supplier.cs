@@ -10,7 +10,7 @@ namespace PFP.Domain.Entities.Commons.Suppliers
         /// <summary>
         /// Unique identifier for the supplier.
         /// </summary>
-        public required int Id { get; set; }
+        public int Id { get; set; }
         /// <summary>
         /// Name of the supplier.
         /// </summary>

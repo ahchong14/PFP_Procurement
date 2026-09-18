@@ -25,7 +25,7 @@ namespace PFP.Domain.Entities.RequestQuotations
         /// <summary>
         /// The associated PurchaseRequest entity for the RequestQuotation.
         /// </summary>
-        public required PurchaseRequest PurchaseRequest { get; set; } = default!;
+        public required PurchaseRequest? PurchaseRequest { get; set; } = default!;
         /// <summary>
         /// The unique identifier for the associated Supplier entity.
         /// </summary>
