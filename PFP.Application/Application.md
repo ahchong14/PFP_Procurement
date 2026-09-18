@@ -32,10 +32,11 @@ Enum definitions (`Role`, `PRStatus`, etc.) are documented in `PFP.Domain/Domain
 7. [API Surface](#7-api-surface)
 8. [Error Response Format](#8-error-response-format)
 9. [Feature Module Catalog](#9-feature-module-catalog)
-10. [Adding a New Use Case](#10-adding-a-new-use-case)
-11. [Implementation Status](#11-implementation-status)
-12. [Known Deviations](#12-known-deviations)
-13. [Project Dependencies](#13-project-dependencies)
+10. [End-to-End Business Flow](#10-end-to-end-business-flow)
+11. [Adding a New Use Case](#11-adding-a-new-use-case)
+12. [Implementation Status](#12-implementation-status)
+13. [Known Deviations](#13-known-deviations)
+14. [Project Dependencies](#14-project-dependencies)
 
 ---
 
@@ -226,19 +227,30 @@ The distinguishing question is whether the failure means the request should not 
 
 ## 6. Request Lifecycle
 
-Example: `CreateUser`.
+Example: `CreateUser`, on the happy path.
 
-```
-WebApi Endpoint
-  → sender.Send(new CreateUserCommand(...))
-    → Sender resolves (or retrieves from cache) the handler chain for this request type
-      → UnhandledExceptionBehaviour   (outermost — logs unanticipated exceptions)
-        → AuthorizationBehaviour      (checks [RequireRole] against the caller's role)
-          → ValidationBehaviour       (runs the FluentValidation rules)
-            → CreateUserCommandHandler (business logic: uniqueness check, password hash, persistence)
+```mermaid
+sequenceDiagram
+    participant Endpoint as WebApi Endpoint
+    participant Sender
+    participant Unhandled as UnhandledExceptionBehaviour
+    participant Auth as AuthorizationBehaviour
+    participant Valid as ValidationBehaviour
+    participant Handler as CreateUserCommandHandler
+
+    Endpoint->>Sender: Send(CreateUserCommand)
+    Sender->>Unhandled: Handle(request, next)
+    Unhandled->>Auth: next()
+    Auth->>Valid: next()
+    Valid->>Handler: next()
+    Handler-->>Valid: UserDto
+    Valid-->>Auth: UserDto
+    Auth-->>Unhandled: UserDto
+    Unhandled-->>Sender: UserDto
+    Sender-->>Endpoint: UserDto
 ```
 
-A failure at any layer (authorization or validation) short-circuits the chain — the Handler is never invoked.
+`Sender` resolves (or retrieves from cache) the handler chain for this request type before dispatching. A failure at `AuthorizationBehaviour` or `ValidationBehaviour` short-circuits the chain right there — the arrow never reaches `CreateUserCommandHandler`, and an exception propagates back up through `Sender` to the Endpoint instead of a `UserDto`.
 
 ---
 
@@ -385,7 +397,36 @@ Commands marked *(internal)* are never invoked directly by an Endpoint: `CreateF
 
 ---
 
-## 10. Adding a New Use Case
+## 10. End-to-End Business Flow
+
+The Scope Document's "Full Flow" section, mapped onto the actual Command names from the table above — this is the diagram to hand someone who knows the business process but not yet the codebase, or vice versa.
+
+```mermaid
+flowchart TD
+    A["Requester submits PR<br/>CreatePurchaseRequest"] --> B["Up to 3 SupplierQuoteCopy rows created + emailed<br/>(inside CreatePurchaseRequestCommandHandler)"]
+    B --> C["Supplier submits pricing via token link<br/>SubmitSupplierQuote (once only)"]
+    C --> D{"PM reviews"}
+    D -->|Reject| E["RejectPurchaseRequest"]
+    D -->|Approve| F["ApprovePurchaseRequest"]
+    F --> G["CreateFromApprovedPR (internal)<br/>PurchaseRequest to RequestQuotation"]
+    G --> H{"Director L1 reviews"}
+    H -->|Reject| I["RejectRequestQuotation (level=L1)"]
+    H -->|Approve, amount within L1 range| J["ApproveRequestQuotation (level=L1)<br/>Status to Approved"]
+    H -->|Approve, amount requires L2| K["ApproveRequestQuotation (level=L1)<br/>Status to PendingL2"]
+    K --> L{"Director L2 reviews"}
+    L -->|Reject| I
+    L -->|Approve| M["ApproveRequestQuotation (level=L2)<br/>Status to Approved"]
+    J --> N["Director clicks convert<br/>ConvertToPurchaseOrder"]
+    M --> N
+    N --> O["CreateFromRequestQuotation (internal)<br/>RequestQuotation to PurchaseOrder"]
+    O --> P["SyncPurchaseOrderToAutoCount<br/>pushes PO, and any new Supplier as a Creditor, into AutoCount"]
+```
+
+The branch at the first diamond (`J`: approved at L1 alone, going straight to `ConvertToPurchaseOrder`) reflects the current design's assumption that a small enough amount can skip L2. Whether that assumption is correct, or every `RequestQuotation` must pass through both tiers regardless of amount, is the open question tracked in `PFP.Domain/Domain.md`'s state machine notes for `RQStatus` — this diagram will need a small correction if that question resolves the other way.
+
+---
+
+## 11. Adding a New Use Case
 
 Worked example: adding an "archive purchase request" operation.
 
@@ -399,7 +440,7 @@ Worked example: adding an "archive purchase request" operation.
 
 ---
 
-## 11. Implementation Status
+## 12. Implementation Status
 
 | Component | Status |
 |---|---|
@@ -409,14 +450,26 @@ Worked example: adding an "archive purchase request" operation.
 | `Integrations/AutoCount/` | Interface and four DTOs defined |
 | `Features/Users/` | Implemented (`CreateUser`, `UpdateUserRole`, `ActivateUser`, `DeactivateUser`, `GetUserById`, `GetUsers`) |
 | `Features/` — remaining 8 modules | Command/Query scaffolding only; Handler logic not yet written |
-| `PFP.Infrastructure` (repository implementations, EF Core, DbContext) | Not yet created |
+| `PFP.Infrastructure` | Project created; `DbContext` and two of fourteen `Configuration` files implemented — see `PFP.Infrastructure/Infrastructure.md` for the current detail |
 | `PFP.WebApi` (Endpoints, `Program.cs` wiring) | Not yet created |
 
 **For frontend integrators**: the API surface in Section 7 is the target contract, not a description of what is currently callable. No HTTP layer exists yet — `PFP.WebApi` has not been created — so no endpoint in this document can be invoked today. The only feature with a fully working chain from repository interface to Handler is `Users`.
 
 ---
 
-## 12. Project Dependencies
+## 13. Known Deviations
+
+Discrepancies between the originally recorded design (`DATA-MODEL.md`) and the actual implementation, found while cross-checking this document against the real source files.
+
+| # | Area | Original design | Actual implementation | Status |
+|---|---|---|---|---|
+| 1 | `CreateUserCommand.Department` | Optional — only meaningful for the `Requester` role | `string`, required for every role | Open — decide whether to relax the field to optional or formally adopt the current required behavior |
+
+This table will grow as further modules move from scaffold to implementation and get cross-checked the same way.
+
+---
+
+## 14. Project Dependencies
 
 - `ProjectReference` → `PFP.Domain`
 - NuGet: `FluentValidation`, `FluentValidation.DependencyInjectionExtensions`

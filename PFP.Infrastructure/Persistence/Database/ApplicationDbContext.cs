@@ -20,11 +20,11 @@ public sealed class ApplicationDbContext(
 
     public DbSet<Item> Items => Set<Item>();
 
-    public DbSet<PurchaseRequest> purchaseRequests => Set<PurchaseRequest>();
+    public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
 
-    public DbSet<PurchaseRequestDetail> purchaseRequestDetails => Set<PurchaseRequestDetail>();
+    public DbSet<PurchaseRequestDetail> PurchaseRequestDetails => Set<PurchaseRequestDetail>();
 
-    public DbSet<SupplierQuoteCopy> SupplierQuoteCopys => Set<SupplierQuoteCopy>();
+    public DbSet<SupplierQuoteCopy> SupplierQuoteCopies => Set<SupplierQuoteCopy>();
 
     public DbSet<SupplierQuoteDetail> SupplierQuoteDetails => Set<SupplierQuoteDetail>();
 

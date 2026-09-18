@@ -32,10 +32,11 @@
 7. [API接口清单](#7-api接口清单)
 8. [错误响应格式](#8-错误响应格式)
 9. [Features模块清单](#9-features模块清单)
-10. [如何新增一个用例](#10-如何新增一个用例)
-11. [实现状态](#11-实现状态)
-12. [已知偏差](#12-已知偏差)
-13. [项目依赖](#13-项目依赖)
+10. [端到端业务流程](#10-端到端业务流程)
+11. [如何新增一个用例](#11-如何新增一个用例)
+12. [实现状态](#12-实现状态)
+13. [已知偏差](#13-已知偏差)
+14. [项目依赖](#14-项目依赖)
 
 ---
 
@@ -226,19 +227,30 @@ MediatR从v13起商业用途需要付费授权。这个项目只用到`IRequest`
 
 ## 6. 请求生命周期
 
-以`CreateUser`为例：
+以`CreateUser`的正常路径为例：
 
-```
-WebApi Endpoint
-  -> sender.Send(new CreateUserCommand(...))
-    -> Sender为这个请求类型解析出（或从缓存取出）对应的Handler调用链
-      -> UnhandledExceptionBehaviour（最外层，记录意外异常）
-        -> AuthorizationBehaviour（对照[RequireRole]检查调用者角色）
-          -> ValidationBehaviour（跑FluentValidation规则）
-            -> CreateUserCommandHandler（业务逻辑：查重、哈希密码、持久化）
+```mermaid
+sequenceDiagram
+    participant Endpoint as WebApi Endpoint
+    participant Sender
+    participant Unhandled as UnhandledExceptionBehaviour
+    participant Auth as AuthorizationBehaviour
+    participant Valid as ValidationBehaviour
+    participant Handler as CreateUserCommandHandler
+
+    Endpoint->>Sender: Send(CreateUserCommand)
+    Sender->>Unhandled: Handle(request, next)
+    Unhandled->>Auth: next()
+    Auth->>Valid: next()
+    Valid->>Handler: next()
+    Handler-->>Valid: UserDto
+    Valid-->>Auth: UserDto
+    Auth-->>Unhandled: UserDto
+    Unhandled-->>Sender: UserDto
+    Sender-->>Endpoint: UserDto
 ```
 
-任何一层失败（权限不对/校验不过）都会短路整条链——Handler不会被调用。
+`Sender`会先解析出（或从缓存取出）这个请求类型对应的Handler调用链，再发起调用。`AuthorizationBehaviour`或`ValidationBehaviour`任何一层失败，链条会当场短路——箭头不会走到`CreateUserCommandHandler`，异常会顺着`Sender`一路传回Endpoint，而不是返回`UserDto`。
 
 ---
 
@@ -385,7 +397,36 @@ WebApi Endpoint
 
 ---
 
-## 10. 如何新增一个用例
+## 10. 端到端业务流程
+
+把Scope文档"Full Flow"那一节，对照上面那张表映射到真实的Command名字——这张图适合拿给"懂业务流程但还不熟悉代码"的人看，反过来给"熟悉代码但还没理清业务全貌"的人看也一样合适。
+
+```mermaid
+flowchart TD
+    A["Requester提交PR<br/>CreatePurchaseRequest"] --> B["生成最多3份SupplierQuoteCopy并发邮件<br/>（CreatePurchaseRequestCommandHandler内部完成）"]
+    B --> C["供应商通过token链接提交报价<br/>SubmitSupplierQuote（只能一次）"]
+    C --> D{"PM审核"}
+    D -->|拒绝| E["RejectPurchaseRequest"]
+    D -->|批准| F["ApprovePurchaseRequest"]
+    F --> G["CreateFromApprovedPR（内部）<br/>PurchaseRequest转成RequestQuotation"]
+    G --> H{"Director L1审核"}
+    H -->|拒绝| I["RejectRequestQuotation（level=L1）"]
+    H -->|批准，金额在L1范围内| J["ApproveRequestQuotation（level=L1）<br/>状态变成Approved"]
+    H -->|批准，金额需要L2| K["ApproveRequestQuotation（level=L1）<br/>状态变成PendingL2"]
+    K --> L{"Director L2审核"}
+    L -->|拒绝| I
+    L -->|批准| M["ApproveRequestQuotation（level=L2）<br/>状态变成Approved"]
+    J --> N["Director点击转换<br/>ConvertToPurchaseOrder"]
+    M --> N
+    N --> O["CreateFromRequestQuotation（内部）<br/>RequestQuotation转成PurchaseOrder"]
+    O --> P["SyncPurchaseOrderToAutoCount<br/>把PO（以及PO里用到的新供应商，作为Creditor）推送进AutoCount"]
+```
+
+第一个判断分支之后的`J`（只经过L1批准、金额够小、直接跳去`ConvertToPurchaseOrder`）反映的是目前设计的一个假设：金额足够小可以跳过L2。这个假设对不对，还是不管金额大小所有`RequestQuotation`都必须走完两级，是记录在`PFP.Domain/Domain.zh.md`状态机说明里、针对`RQStatus`的一个开放问题——如果这个问题最后往另一个方向确认，这张图需要跟着小改一下。
+
+---
+
+## 11. 如何新增一个用例
 
 以新增"归档PR"操作为例：
 
@@ -399,7 +440,7 @@ WebApi Endpoint
 
 ---
 
-## 11. 实现状态
+## 12. 实现状态
 
 | 部分 | 状态 |
 |---|---|
@@ -409,14 +450,26 @@ WebApi Endpoint
 | `Integrations/AutoCount/` | 接口和四个DTO已定义 |
 | `Features/Users/` | 已实现（`CreateUser`、`UpdateUserRole`、`ActivateUser`、`DeactivateUser`、`GetUserById`、`GetUsers`） |
 | `Features/`其余8个模块 | 只有Command/Query骨架，Handler逻辑尚未编写 |
-| `PFP.Infrastructure`（Repository实现、EF Core、DbContext） | 尚未建立 |
+| `PFP.Infrastructure` | 项目已建立；`DbContext`和14个`Configuration`文件里的2个已实现——具体进度见`PFP.Infrastructure/Infrastructure.zh.md` |
 | `PFP.WebApi`（Endpoints、`Program.cs`接线） | 尚未建立 |
 
 **给前端的提醒**：第7节的API接口清单是目标契约，不代表现在能调通。`PFP.WebApi`还不存在，目前没有任何HTTP层，本文档里的接口现在都无法被调用。唯一从Repository接口到Handler完整跑通的功能是`Users`。
 
 ---
 
-## 12. 项目依赖
+## 13. 已知偏差
+
+原始设计记录（`DATA-MODEL.md`）和实际实现之间的差异，是在对照真实源码核对本文档时发现的。
+
+| 编号 | 位置 | 原始设计 | 实际实现 | 状态 |
+|---|---|---|---|---|
+| 1 | `CreateUserCommand.Department` | 可选——只有`Requester`角色需要 | `string`类型，所有角色都必填 | 待定——需要决定是把字段改回可选，还是正式采纳目前的必填行为 |
+
+随着后续模块从骨架进入实现、并逐一对照核实，这张表会持续增加条目。
+
+---
+
+## 14. 项目依赖
 
 - `ProjectReference` -> `PFP.Domain`
 - NuGet：`FluentValidation`、`FluentValidation.DependencyInjectionExtensions`

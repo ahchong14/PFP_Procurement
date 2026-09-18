@@ -5,7 +5,7 @@ namespace PFP.Domain.Entities
 {
     public class ApprovalSetting : IExposableEntity
     {
-        public ApprovalLevel level { get; set; }
+        public ApprovalLevel Level { get; set; }
 
         public Role ApproverRole { get; set; }
 

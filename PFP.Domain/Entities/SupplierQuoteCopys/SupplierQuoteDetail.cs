@@ -16,7 +16,7 @@ namespace PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>
         /// The associated SupplierQuoteCopy entity.
         /// </summary>
-        public required SupplierQuoteCopy supplierQuoteCopy { get; set; } = default!;
+        public required SupplierQuoteCopy SupplierQuoteCopy { get; set; } = default!;
         /// <summary>   
         /// The identifier of the associated PurchaseRequestItem entity.
         /// </summary>
@@ -24,7 +24,7 @@ namespace PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>
         /// The associated PurchaseRequest entity.
         /// </summary>
-        public required PurchaseRequest purchaseRequest { get; set; } = default!;
+        public required PurchaseRequestDetail PurchaseRequestDetail { get; set; } = default!;
         /// <summary>
         /// The unit price of the item in the supplier quote.
         /// </summary>

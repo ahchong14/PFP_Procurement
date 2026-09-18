@@ -17,11 +17,13 @@
 ## 目录
 
 1. [设计原则](#1-设计原则)
-2. [完整目录结构](#2-完整目录结构)
-3. [枚举速查](#3-枚举速查)
-4. [实体清单](#4-实体清单)
-5. [标记接口](#5-标记接口)
-6. [已知问题](#6-已知问题)
+2. [实体关系图](#2-实体关系图)
+3. [完整目录结构](#3-完整目录结构)
+4. [枚举速查](#4-枚举速查)
+5. [实体清单](#5-实体清单)
+6. [状态机](#6-状态机)
+7. [标记接口](#7-标记接口)
+8. [已知问题](#8-已知问题)
 
 ---
 
@@ -33,7 +35,42 @@
 
 ---
 
-## 2. 完整目录结构
+## 2. 实体关系图
+
+跟`PFP.Infrastructure/Infrastructure.zh.md`里那张图是同样的14个实体，但这里是纯业务视角——不带删除行为、不带持久化细节。要看这些关系在EF Core/SQL Server层面具体怎么处理，去那份文档。
+
+```mermaid
+erDiagram
+    User ||--o{ PurchaseRequest : "发起，作为Requester"
+    User ||--o{ PurchaseRequest : "决定，作为DecidedByUser"
+    User ||--o{ RQApproval : "审批，作为Approver"
+
+    PurchaseRequest ||--o{ PurchaseRequestDetail : "明细行"
+    PurchaseRequest ||--o{ SupplierQuoteCopy : "分发给最多3家供应商"
+    PurchaseRequest |o--o| SupplierQuoteCopy : "选定"
+    PurchaseRequest ||--o{ RequestQuotation : "转换成"
+
+    Supplier ||--o{ SupplierQuoteCopy : "收到"
+    Supplier ||--o{ RequestQuotation : "被报价"
+    Supplier ||--o{ PurchaseOrder : "履约"
+
+    SupplierQuoteCopy ||--o{ SupplierQuoteDetail : "提交的报价"
+    PurchaseRequestDetail ||--o{ SupplierQuoteDetail : "被报价"
+
+    RequestQuotation ||--o{ RequestQuotationDetail : "明细行（快照）"
+    RequestQuotation ||--o{ RQApproval : "审批记录"
+    RequestQuotation ||--o| PurchaseOrder : "转换成"
+
+    PurchaseOrder ||--o{ PurchaseOrderDetail : "明细行（快照）"
+```
+
+`Item`（物料主数据）和`Counter`（单据编号生成器）跟其它任何东西都没有外键关系，图上省略——`Item`只是被字符串编码快照引用（`PurchaseRequestDetail.ItemCode`），不是真正的外键。
+
+图上有两条关系被画成"1对多"，是因为C#导航属性现在就是这么定义的，但这两条背后的业务规则其实是"1对0或1"：`PurchaseRequest -> RequestQuotation`（一张PR最多转出一张RQ）和`RequestQuotation -> PurchaseOrder`（一张RQ最多转出一张PO）。具体记录见"已知问题"那一节。
+
+---
+
+## 3. 完整目录结构
 
 ```
 PFP.Domain/
@@ -81,7 +118,7 @@ PFP.Domain/
 
 ---
 
-## 3. 枚举速查
+## 4. 枚举速查
 
 枚举值序列化成JSON时是字符串（比如`"role": "HeadOfPurchase"`），不是数字。
 
@@ -99,7 +136,7 @@ PFP.Domain/
 
 ---
 
-## 4. 实体清单
+## 5. 实体清单
 
 ### `User`——内部账号
 
@@ -148,7 +185,7 @@ PFP.Domain/
 |---|---|
 | Id | int |
 | DocNo | string |
-| RequestedId | int——应为`RequesterId`，见已知问题第1条 |
+| RequesterId | int |
 | Requester | User |
 | Department | string |
 | Status | PRStatus，默认`Quoting` |
@@ -288,7 +325,67 @@ PFP.Domain/
 
 ---
 
-## 5. 标记接口
+## 6. 状态机
+
+四个`Status`枚举各自驱动一套状态机，靠`PFP.Application/Features/`下的Handler强制执行，不是实体自己（呼应第1节的贫血模型原则）。下面的图描述的是设计意图，不会因为图这么画就自动生效——每一条箭头都对应一个具体的Handler。
+
+### `PurchaseRequest.Status`（`PRStatus`）
+
+```mermaid
+stateDiagram-v2
+    [*] --> Quoting : CreatePurchaseRequest
+    Quoting --> PmReview : 供应商都提交完或PM打开审核
+    PmReview --> Approved : ApprovePurchaseRequest
+    PmReview --> Rejected : RejectPurchaseRequest
+    Approved --> Converted : CreateFromApprovedPR（内部）
+    Rejected --> [*]
+    Converted --> [*]
+```
+
+### `RequestQuotation.Status`（`RQStatus`）
+
+```mermaid
+stateDiagram-v2
+    [*] --> PendingL1 : CreateFromApprovedPR（内部）
+    PendingL1 --> PendingL2 : ApproveRequestQuotation（level=L1，金额需要L2）
+    PendingL1 --> Approved : ApproveRequestQuotation（level=L1，金额在L1范围内）
+    PendingL1 --> Rejected : RejectRequestQuotation（level=L1）
+    PendingL2 --> Approved : ApproveRequestQuotation（level=L2）
+    PendingL2 --> Rejected : RejectRequestQuotation（level=L2）
+    Approved --> Converted : ConvertToPurchaseOrder
+    Rejected --> [*]
+    Converted --> [*]
+```
+
+每张`RequestQuotation`是不是都必须走完`PendingL1`和`PendingL2`两级，还是金额够小可以从`PendingL1`直接到`Approved`，这是对着Scope文档提出的一个开放问题——详见`Application.zh.md`里针对"Purchase Order Conversion"那条的API说明。
+
+### `SupplierQuoteCopy.Status`（`Copystatus`）
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending : PR分发给供应商
+    Pending --> Submitted : SubmitSupplierQuote
+    Submitted --> [*]
+```
+
+单向，不可逆——供应商只允许提交一次（Scope文档Full Flow第3条）。
+
+### `PurchaseOrder.Status`（`POStatus`）
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created : CreateFromRequestQuotation（内部）
+    Created --> Synced : SyncPurchaseOrderToAutoCount成功
+    Created --> SyncFailed : SyncPurchaseOrderToAutoCount失败
+    SyncFailed --> Synced : 重试成功
+    Synced --> [*]
+```
+
+`PurchaseOrder`上的`SyncAttempts`和`SyncError`，每走一次`SyncFailed -> Synced`这条重试路径都会更新。
+
+---
+
+## 7. 标记接口
 
 | 接口 | 定义 | 谁实现 |
 |---|---|---|
@@ -303,18 +400,19 @@ PFP.Domain/
 
 ---
 
-## 6. 已知问题
+## 8. 已知问题
 
 对照真实源码核对本文档时发现的问题。这些问题目前都不影响编译，记录在这里是为了不被重复发现，也方便以后有计划地处理。
 
 | 编号 | 位置 | 问题 | 影响 |
 |---|---|---|---|
-| 1 | `PurchaseRequest.RequestedId` | 应为`RequesterId`——现在的名字跟配对的导航属性`Requester`对不上 | 纯拼写问题，无功能影响 |
+| 1 | `PurchaseRequest.RequesterId` | 已解决——之前误写成`RequestedId`，现在已经跟配对的导航属性`Requester`对上了。 | — |
 | 2 | `SupplierQuoteDetail.purchaseRequest` | 类型是`PurchaseRequest`，但配对的外键是`PurchaseRequestItemId`；导航属性应该是`PurchaseRequestDetail`类型 | 类型和外键不匹配——配置EF Core关系时容易出问题 |
 | 3 | `RequestQuotation.PurchaseOrder` | 类型是`ICollection<PurchaseOrder>`，但`PurchaseOrder.RequestQuotationId`建立的是1对1关系（一个RQ最多转出一个PO） | 应该是`PurchaseOrder?` |
 | 4 | `Enums/CopyStatus.cs` | 类型声明为`Copystatus`（小写"s"），跟`PRStatus`/`RQStatus`/`POStatus`的PascalCase命名风格不一致 | 仅命名规范问题 |
 | 5 | `ApprovalSetting.level` | 属性名小写开头，是代码库里唯一一个没有遵循PascalCase的属性 | 仅命名规范问题 |
 | 6 | `User.Department`、`PurchaseRequest.Department` | 两处都是普通`string`；尽管`Department`在最初的Scope核对记录里是一个明确的业务概念，这个项目里目前没有对应的枚举 | 如果前端假设Department是固定取值集合，后端目前不会做这种校验 |
 | 7 | `Supplier.Id` | 声明为`required int Id` | 每次`new Supplier { ... }`都会被强制要求显式赋值`Id`，但这本应是数据库自增生成的值；跟`User.Id`/`PurchaseRequest.Id`（普通`int`）不一致 |
+| 8 | `PurchaseRequest.RequestQuotations` | 类型是`ICollection<RequestQuotation>`；Scope文档Full Flow描述的是一张PR转成**一张**RQ（单数），`CreateFromApprovedPRCommandHandler`的设计也是一次性转换 | 跟第3条是同一类问题——很可能应该是`RequestQuotation?`，还没确认 |
 
-第1-3条涉及改字段类型或名称，等对应的`Features/`模块实现之后可能有连带影响。第4-7条改动范围小、风险低。
+第2、3、8条涉及改字段类型，等对应的`Features/`模块实现之后可能有连带影响。第4-7条改动范围小、风险低。第1条已解决。

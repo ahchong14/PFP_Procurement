@@ -17,11 +17,13 @@ Application-layer architecture (Behaviours, Repositories, request pipeline) is d
 ## Table of Contents
 
 1. [Design Principles](#1-design-principles)
-2. [Directory Structure](#2-directory-structure)
-3. [Enum Reference](#3-enum-reference)
-4. [Entity Reference](#4-entity-reference)
-5. [Marker Interfaces](#5-marker-interfaces)
-6. [Known Issues](#6-known-issues)
+2. [Entity Relationship Diagram](#2-entity-relationship-diagram)
+3. [Directory Structure](#3-directory-structure)
+4. [Enum Reference](#4-enum-reference)
+5. [Entity Reference](#5-entity-reference)
+6. [State Machines](#6-state-machines)
+7. [Marker Interfaces](#7-marker-interfaces)
+8. [Known Issues](#8-known-issues)
 
 ---
 
@@ -33,7 +35,42 @@ Application-layer architecture (Behaviours, Repositories, request pipeline) is d
 
 ---
 
-## 2. Directory Structure
+## 2. Entity Relationship Diagram
+
+The same 14 entities as `PFP.Infrastructure/Infrastructure.md`'s diagram, but in purely business terms — no delete behavior, no persistence detail. See that document if you need the EF Core / SQL Server side of these same relationships.
+
+```mermaid
+erDiagram
+    User ||--o{ PurchaseRequest : "raises, as Requester"
+    User ||--o{ PurchaseRequest : "decides, as DecidedByUser"
+    User ||--o{ RQApproval : "approves, as Approver"
+
+    PurchaseRequest ||--o{ PurchaseRequestDetail : "line items"
+    PurchaseRequest ||--o{ SupplierQuoteCopy : "distributed to up to 3 suppliers as"
+    PurchaseRequest |o--o| SupplierQuoteCopy : selects
+    PurchaseRequest ||--o{ RequestQuotation : "converts into"
+
+    Supplier ||--o{ SupplierQuoteCopy : receives
+    Supplier ||--o{ RequestQuotation : "quoted for"
+    Supplier ||--o{ PurchaseOrder : fulfills
+
+    SupplierQuoteCopy ||--o{ SupplierQuoteDetail : "submitted pricing"
+    PurchaseRequestDetail ||--o{ SupplierQuoteDetail : "quoted against"
+
+    RequestQuotation ||--o{ RequestQuotationDetail : "line items (snapshot)"
+    RequestQuotation ||--o{ RQApproval : "approval trail"
+    RequestQuotation ||--o| PurchaseOrder : "converts into"
+
+    PurchaseOrder ||--o{ PurchaseOrderDetail : "line items (snapshot)"
+```
+
+`Item` (material master data) and `Counter` (document number sequence generator) have no foreign-key relationship to anything else and are omitted — `Item` is only referenced by string code snapshot (`PurchaseRequestDetail.ItemCode`), not a real foreign key.
+
+Two of the relationships above are drawn as "1 to many" in this diagram because that is how the C# navigation properties are currently typed, even though the business rule behind them is "1 to 0-or-1": `PurchaseRequest -> RequestQuotation` (a request converts into at most one quotation) and `RequestQuotation -> PurchaseOrder` (a quotation converts into at most one order). See the Known Issues section for the tracked correction.
+
+---
+
+## 3. Directory Structure
 
 ```
 PFP.Domain/
@@ -81,7 +118,7 @@ PFP.Domain/
 
 ---
 
-## 3. Enum Reference
+## 4. Enum Reference
 
 Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not integers.
 
@@ -99,7 +136,7 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 
 ---
 
-## 4. Entity Reference
+## 5. Entity Reference
 
 ### `User` — internal account
 
@@ -148,7 +185,7 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 |---|---|
 | Id | int |
 | DocNo | string |
-| RequestedId | int — should read `RequesterId`, see the corresponding section below, item 1 |
+| RequesterId | int |
 | Requester | User |
 | Department | string |
 | Status | PRStatus, default `Quoting` |
@@ -288,7 +325,67 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 
 ---
 
-## 5. Marker Interfaces
+## 6. State Machines
+
+The four `Status` enums each drive a state machine enforced by `PFP.Application/Features/` Handlers, not by the entities themselves (per the anemic-model principle in Section 1). These diagrams describe the intended transitions; nothing here is enforced automatically just because the diagram says so — every arrow corresponds to a specific Handler.
+
+### `PurchaseRequest.Status` (`PRStatus`)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Quoting : CreatePurchaseRequest
+    Quoting --> PmReview : all copies submitted or PM opens review
+    PmReview --> Approved : ApprovePurchaseRequest
+    PmReview --> Rejected : RejectPurchaseRequest
+    Approved --> Converted : CreateFromApprovedPR (internal)
+    Rejected --> [*]
+    Converted --> [*]
+```
+
+### `RequestQuotation.Status` (`RQStatus`)
+
+```mermaid
+stateDiagram-v2
+    [*] --> PendingL1 : CreateFromApprovedPR (internal)
+    PendingL1 --> PendingL2 : ApproveRequestQuotation (level=L1, amount requires L2)
+    PendingL1 --> Approved : ApproveRequestQuotation (level=L1, amount within L1 range)
+    PendingL1 --> Rejected : RejectRequestQuotation (level=L1)
+    PendingL2 --> Approved : ApproveRequestQuotation (level=L2)
+    PendingL2 --> Rejected : RejectRequestQuotation (level=L2)
+    Approved --> Converted : ConvertToPurchaseOrder
+    Rejected --> [*]
+    Converted --> [*]
+```
+
+Whether every `RequestQuotation` must pass through both `PendingL1` and `PendingL2`, or whether a small enough amount can go straight from `PendingL1` to `Approved`, is an open question raised against the Scope Document — see `Application.md`'s API surface notes for the Purchase Order Conversion clause.
+
+### `SupplierQuoteCopy.Status` (`Copystatus`)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending : PR distributed to supplier
+    Pending --> Submitted : SubmitSupplierQuote
+    Submitted --> [*]
+```
+
+One-way, non-reversible — a supplier is only allowed to submit once (Scope Document, Full Flow item 3).
+
+### `PurchaseOrder.Status` (`POStatus`)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created : CreateFromRequestQuotation (internal)
+    Created --> Synced : SyncPurchaseOrderToAutoCount succeeds
+    Created --> SyncFailed : SyncPurchaseOrderToAutoCount fails
+    SyncFailed --> Synced : retry succeeds
+    Synced --> [*]
+```
+
+`SyncAttempts` and `SyncError` on `PurchaseOrder` are updated every time the `SyncFailed -> Synced` retry path is taken.
+
+---
+
+## 7. Marker Interfaces
 
 | Interface | Definition | Implemented by |
 |---|---|---|
@@ -303,18 +400,19 @@ These interfaces let `PFP.Application` write generic infrastructure code — e.g
 
 ---
 
-## 6. Known Issues
+## 8. Known Issues
 
 Discrepancies found while cross-checking this document against the real source files. None currently prevent the solution from building; they are listed here so they are not rediscovered independently and so they can be prioritized deliberately.
 
 | # | Location | Issue | Impact |
 |---|---|---|---|
-| 1 | `PurchaseRequest.RequestedId` | Should read `RequesterId` — the current name does not match the paired navigation property `Requester` | Cosmetic; no functional impact |
+| 1 | `PurchaseRequest.RequesterId` | Resolved — previously misnamed `RequestedId`; now matches the paired navigation property `Requester`. | — |
 | 2 | `SupplierQuoteDetail.purchaseRequest` | Typed as `PurchaseRequest`, but the paired foreign key is `PurchaseRequestItemId`; the navigation property should be typed `PurchaseRequestDetail` | Type/FK mismatch — a source of confusion when this relationship is configured in EF Core |
 | 3 | `RequestQuotation.PurchaseOrder` | Typed as `ICollection<PurchaseOrder>`, but `PurchaseOrder.RequestQuotationId` establishes a 1:1 relationship (one RQ converts to at most one PO) | Should be `PurchaseOrder?` |
 | 4 | `Enums/CopyStatus.cs` | The type is declared as `Copystatus` (lowercase "s"), inconsistent with the PascalCase convention used by `PRStatus`/`RQStatus`/`POStatus` | Naming convention only |
 | 5 | `ApprovalSetting.level` | Property name starts lowercase, the only property in the codebase that does not follow PascalCase | Naming convention only |
 | 6 | `User.Department`, `PurchaseRequest.Department` | Both are plain `string`; there is no `Department` enum in this project despite `Department` appearing as a documented business concept in the original scope reconciliation | If a frontend expects a fixed set of department values, the backend currently performs no such validation |
 | 7 | `Supplier.Id` | Declared `required int Id` | Forces every `new Supplier { ... }` construction to explicitly assign `Id`, even though it is a database-generated identity value; inconsistent with `User.Id`/`PurchaseRequest.Id`, which are plain `int` |
+| 8 | `PurchaseRequest.RequestQuotations` | Typed as `ICollection<RequestQuotation>`; the Scope Document's Full Flow describes a request converting into *a* quotation (singular), and `CreateFromApprovedPRCommandHandler` is designed as a one-time conversion | Same class of issue as item 3 — likely should be `RequestQuotation?`; unconfirmed |
 
-Items 1–3 involve changing a field type or name and may have downstream impact once the corresponding `Features/` modules are implemented. Items 4–7 are lower-risk, isolated changes.
+Items 2, 3, and 8 involve changing a field type and may have downstream impact once the corresponding `Features/` modules are implemented. Items 4–7 are lower-risk, isolated changes. Item 1 is resolved.

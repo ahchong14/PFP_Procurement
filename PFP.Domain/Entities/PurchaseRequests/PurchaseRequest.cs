@@ -13,7 +13,7 @@ namespace PFP.Domain.Entities.PurchaseRequests
 
         public string DocNo { get; set; } = string.Empty;
 
-        public required int RequestedId { get; set; }
+        public required int RequesterId { get; set; }
 
         public required User Requester { get; set; } = default!;
 

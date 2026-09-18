@@ -20,6 +20,6 @@ namespace PFP.Domain.Entities.PurchaseRequests
 
         public decimal Qty { get; set; } = 0;
 
-        public required ICollection<SupplierQuoteDetail> QuotedBy { get; set; } = [];
+        public required ICollection<SupplierQuoteDetail> QuotedBy { get; set; } = new List<SupplierQuoteDetail>();
     }
 }
