@@ -34,7 +34,7 @@ namespace PFP.Domain.Entities.SupplierQuoteCopys
         /// <summary>
         /// The status of the SupplierQuoteCopy entity, indicating its current state in the workflow.
         /// </summary>
-        public Copystatus Status { get; set; } = Copystatus.Pending;
+        public CopyStatus Status { get; set; } = CopyStatus.Pending;
         /// <summary>
         /// Any additional remarks or comments related to the SupplierQuoteCopy entity.
         /// </summary>

@@ -15,10 +15,6 @@ namespace PFP.Infrastructure.Persistence.Configurations.SupplierQuotes
             // Primary Key
             builder.HasKey(x => x.Id);
 
-            // Auto Increment 
-            builder.Property(x => x.Id)
-                .ValueGeneratedOnAdd();
-
             // Public Submission Token
             builder.Property(x => x.Token)
                 .HasMaxLength(100)
@@ -28,7 +24,7 @@ namespace PFP.Infrastructure.Persistence.Configurations.SupplierQuotes
             builder.Property(x => x.Status)
                 .HasConversion<string>()
                 .HasMaxLength(20)
-                .HasDefaultValue(Copystatus.Pending)
+                .HasDefaultValue(CopyStatus.Pending)
                 .IsRequired();
 
             //Remarks

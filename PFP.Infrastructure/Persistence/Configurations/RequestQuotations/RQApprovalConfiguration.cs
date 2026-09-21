@@ -15,10 +15,6 @@ public sealed class RQApprovalConfiguration
         // Primary Key
         builder.HasKey(x => x.Id);
 
-        // Auto Increment
-        builder.Property(x => x.Id)
-            .ValueGeneratedOnAdd();
-
         // Approval Level
         builder.Property(x => x.Level)
             .HasConversion<string>()

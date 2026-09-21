@@ -15,10 +15,6 @@ public sealed class PurchaseOrderConfiguration
         // Primary Key
         builder.HasKey(x => x.Id);
 
-        // Auto Increment
-        builder.Property(x => x.Id)
-            .ValueGeneratedOnAdd();
-
         // Document Number
         builder.Property(x => x.DocNo)
             .HasMaxLength(50)

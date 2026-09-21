@@ -1,10 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using PFP.Application.Abstractions.Persistence;
+using PFP.Infrastructure.Persistence.Database;
 
 namespace PFP.Infrastructure.Persistence
 {
-    internal class UnitOfWork
+    public sealed class UnitOfWork : IUnitOfWork
     {
+        private readonly ApplicationDbContext _db;
+
+        public UnitOfWork(ApplicationDbContext db)
+        {
+            _db = db;
+        }
+
+        public Task<int> SaveChangesAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return _db.SaveChangesAsync(cancellationToken);
+        }
     }
 }

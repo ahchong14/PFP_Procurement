@@ -6,6 +6,6 @@ namespace PFP.Application.Abstractions.Persistence
     public interface IApprovalSettingRepository
     {
         Task<ApprovalSetting?> GetByLevelAsync(ApprovalLevel level, CancellationToken cancellationToken);
-        Task<List<ApprovalSetting>> GetAllAsync(CancellationToken cancellationToken);
+        Task<IReadOnlyList<ApprovalSetting>> GetAllAsync(CancellationToken cancellationToken);
     }
 }

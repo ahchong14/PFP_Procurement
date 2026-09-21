@@ -14,10 +14,6 @@ namespace PFP.Infrastructure.Persistence.Configurations.Items
             //Primary Key
             builder.HasKey(X => X.Id);
 
-            // Auto Increment 
-            builder.Property(x => x.Id)
-                .ValueGeneratedOnAdd();
-
             // Item Code
             builder.Property(x => x.Code)
                 .HasMaxLength(50)

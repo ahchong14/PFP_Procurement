@@ -15,10 +15,6 @@ public sealed class SupplierQuoteDetailConfiguration
         // Primary Key
         builder.HasKey(x => x.Id);
 
-        // Auto Increment
-        builder.Property(x => x.Id)
-            .ValueGeneratedOnAdd();
-
         // Unit Price
         builder.Property(x => x.UnitPrice)
             .HasPrecision(18, 2)
