@@ -13,6 +13,7 @@ internal sealed class SupplierQuoteRepository(ApplicationDbContext dbContext)
         string token,
         CancellationToken cancellationToken)
         => dbContext.SupplierQuoteCopies.Include(x => x.PurchaseRequest).FirstOrDefaultAsync(x => x.Token == token, cancellationToken);
+
     // Get a supplier quote copy by ID
     public Task<SupplierQuoteCopy?> GetByIdAsync(
         int id,

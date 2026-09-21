@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PFP.Application\PFP.Application.csproj" />
+    <ProjectReference Include="..\PFP.Infrastructure\PFP.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

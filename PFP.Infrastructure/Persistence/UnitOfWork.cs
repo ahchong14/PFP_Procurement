@@ -13,7 +13,7 @@ namespace PFP.Infrastructure.Persistence
         }
 
         public Task<int> SaveChangesAsync(
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken)
         {
             return _db.SaveChangesAsync(cancellationToken);
         }

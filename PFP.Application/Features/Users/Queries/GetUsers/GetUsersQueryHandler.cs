@@ -9,7 +9,7 @@ namespace PFP.Application.Features.Users.Queries.GetUsers
     {
         public async Task<List<UserDto>> Handle(GetUsersQuery request, CancellationToken cancellationToken)
         {
-            List<User> users = await userRepository.GetAllAsync(cancellationToken);
+            IReadOnlyList<User> users = await userRepository.GetAllAsync(cancellationToken);
             return users.Select(u => new UserDto(u.Id, u.Name, u.Email, u.Role, u.Department, u.IsActive)).ToList();
         }
     }

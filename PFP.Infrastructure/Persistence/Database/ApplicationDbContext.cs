@@ -33,6 +33,7 @@ public sealed class ApplicationDbContext(
     public DbSet<RequestQuotationDetail> RequestQuotationDetails => Set<RequestQuotationDetail>();
 
     public DbSet<RQApproval> RQApprovals => Set<RQApproval>();
+
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
 
     public DbSet<PurchaseOrderDetail> PurchaseOrderDetails => Set<PurchaseOrderDetail>();

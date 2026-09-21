@@ -49,8 +49,8 @@ public sealed class RequestQuotationConfiguration
 
         // Purchase Request
         builder.HasOne(x => x.PurchaseRequest)
-            .WithMany(x => x.RequestQuotations)
-            .HasForeignKey(x => x.PurchaseRequestId)
+            .WithOne(x => x.RequestQuotations)
+            .HasForeignKey<RequestQuotation>(x => x.PurchaseRequestId)
             .OnDelete(DeleteBehavior.Restrict);
 
         // Supplier

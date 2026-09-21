@@ -38,12 +38,14 @@ namespace PFP.Domain.Entities.PurchaseRequests
 
         public User? DecidedByUser { get; set; }
 
+        public RequestQuotation? RequestQuotations { get; set; }
+
         public byte[] RowVersion { get; set; } = [];
 
         public ICollection<PurchaseRequestDetail> Items { get; set; } = [];
 
         public ICollection<SupplierQuoteCopy> SupplierQuoteCopies { get; set; } = [];
 
-        public ICollection<RequestQuotation?> RequestQuotations { get; set; } = [];
+
     }
 }

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace PFP.Infrastructure.Persistence.Seed
+namespace PFP.Infrastructure.Persistence.Database.Seed
 {
     internal class ApplicationDbContextSeed
     {

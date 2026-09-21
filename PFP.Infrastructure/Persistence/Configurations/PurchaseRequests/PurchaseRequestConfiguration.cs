@@ -85,12 +85,9 @@ namespace PFP.Infrastructure.Persistence.Configurations.PurchaseRequests
                 .HasForeignKey(x => x.PurchaseRequestId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Purchase Request -> Request Quotations
-            builder.HasMany(x => x.RequestQuotations)
-                .WithOne(x => x.PurchaseRequest)
-                .HasForeignKey(x => x.PurchaseRequestId)
-                .OnDelete(DeleteBehavior.Restrict);
-
+            // Purchase Request -> Request Quotation (1:0..1) is configured from the
+            // RequestQuotation side - see RequestQuotationConfiguration.cs, which also
+            // owns the HasForeignKey<RequestQuotation>() call this relationship needs.
         }
     }
 }
