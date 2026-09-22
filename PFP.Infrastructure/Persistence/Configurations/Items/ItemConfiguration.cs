@@ -9,7 +9,7 @@ namespace PFP.Infrastructure.Persistence.Configurations.Items
         public void Configure(EntityTypeBuilder<Item> builder)
         {
             //Table 
-            builder.ToTable("itmes");
+            builder.ToTable("items");
 
             //Primary Key
             builder.HasKey(X => X.Id);
@@ -20,8 +20,8 @@ namespace PFP.Infrastructure.Persistence.Configurations.Items
                 .IsRequired();
 
             // Item Name
-            builder.Property(x => x.Code)
-                .HasMaxLength(50)
+            builder.Property(x => x.Name)
+                .HasMaxLength(150)
                 .IsRequired();
 
             // Unit of Measurement

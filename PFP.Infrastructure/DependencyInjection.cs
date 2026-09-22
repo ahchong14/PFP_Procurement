@@ -35,7 +35,7 @@ public static class DependencyInjection
         IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString =
+        string connectionString =
             configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' was not found.");
@@ -68,7 +68,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
 
         services.AddScoped<ICurrentUserService, CurrentUserService>();
-        services.AddScoped<IPasswordHasher, PasswordHasher>();
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         services.Configure<JwtOptions>(
             configuration.GetSection(JwtOptions.SectionName));

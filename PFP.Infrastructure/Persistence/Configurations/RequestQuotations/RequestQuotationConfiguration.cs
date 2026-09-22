@@ -55,7 +55,7 @@ public sealed class RequestQuotationConfiguration
 
         // Supplier
         builder.HasOne(x => x.Supplier)
-            .WithMany()
+            .WithMany(x => x.RequestQuotations)
             .HasForeignKey(x => x.SupplierId)
             .OnDelete(DeleteBehavior.Restrict);
 

@@ -86,7 +86,7 @@ public sealed class PurchaseOrderConfiguration
 
         // Supplier
         builder.HasOne(x => x.Supplier)
-            .WithMany()
+            .WithMany(x => x.PurchaseOrders)
             .HasForeignKey(x => x.SupplierId)
             .OnDelete(DeleteBehavior.Restrict);
 

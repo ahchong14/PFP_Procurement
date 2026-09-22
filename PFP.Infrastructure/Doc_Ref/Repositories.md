@@ -1,6 +1,6 @@
 # Repositories — Design Reference
 
-**One section per repository, covering every implementation under `Persistence/Repositories/`.** All eight are implemented as of this writing — see `Infrastructure.md` for overall project status. Wiring them into DI (`DependencyInjection.cs`) and writing the `Features/` Handler bodies that call them are still open work; the Handler classes referenced throughout this document exist as scaffolds (correct namespace, correct name, empty body) that establish which repository method each one is intended to call.
+**One section per repository, covering every implementation under `Persistence/Repositories/`.** All eight are implemented and wired into DI (`DependencyInjection.cs`) as of this writing — see `Infrastructure.md` for overall project status. Writing the `Features/` Handler bodies that call them is still open work; the Handler classes referenced throughout this document exist as scaffolds (correct namespace, correct name, empty body) that establish which repository method each one is intended to call.
 
 Each repository implements the interface of the same name declared in `PFP.Application/Abstractions/Persistence/`. This document assumes the conventions below and does not repeat them per repository; only what is specific to each one is called out.
 

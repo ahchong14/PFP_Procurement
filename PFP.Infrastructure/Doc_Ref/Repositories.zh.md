@@ -1,6 +1,6 @@
 # Repository 设计参考
 
-**每个Repository一节，覆盖`Persistence/Repositories/`下的每一个实现。** 写这份文档的时候，八个Repository全部已经实现——整个项目的状态见`Infrastructure.zh.md`。把它们接进DI（`DependencyInjection.cs`）、以及把`Features/`里各个Handler的方法体真正写出来，这两块还是尚未完成的工作；本文档里提到的每个Handler类都已经作为脚手架存在（命名空间对、类名对、方法体是空的），它们的存在本身就说明了"这个Repository方法是打算被谁调用的"。
+**每个Repository一节，覆盖`Persistence/Repositories/`下的每一个实现。** 写这份文档的时候，八个Repository全部已经实现、也已经接进DI（`DependencyInjection.cs`）——整个项目的状态见`Infrastructure.zh.md`。把`Features/`里各个Handler的方法体真正写出来，这一块还是尚未完成的工作；本文档里提到的每个Handler类都已经作为脚手架存在（命名空间对、类名对、方法体是空的），它们的存在本身就说明了"这个Repository方法是打算被谁调用的"。
 
 每个Repository都实现`PFP.Application/Abstractions/Persistence/`里同名的接口。本文档假设你已经了解下面这批通用规范，每个Repository那一节不会重复讲一遍，只讲这个Repository特有的东西。
 
