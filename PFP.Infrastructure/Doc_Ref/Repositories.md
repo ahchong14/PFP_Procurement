@@ -17,10 +17,11 @@ Each repository implements the interface of the same name declared in `PFP.Appli
 7. [SupplierQuoteRepository](#7-supplierquoterepository) — implemented
 8. [RequestQuotationRepository](#8-requestquotationrepository) — implemented
 9. [PurchaseOrderRepository](#9-purchaseorderrepository) — implemented
-10. [Unit of Work and Transaction Boundary](#10-unit-of-work-and-transaction-boundary)
-11. [Repository Design Rule](#11-repository-design-rule)
-12. [Repository-to-Use-Case Reference Table](#12-repository-to-use-case-reference-table)
-13. [End-to-End Procurement Flow](#13-end-to-end-procurement-flow)
+10. [EmailSettingsRepository](#10-emailsettingsrepository) — implemented
+11. [Unit of Work and Transaction Boundary](#11-unit-of-work-and-transaction-boundary)
+12. [Repository Design Rule](#12-repository-design-rule)
+13. [Repository-to-Use-Case Reference Table](#13-repository-to-use-case-reference-table)
+14. [End-to-End Procurement Flow](#14-end-to-end-procurement-flow)
 
 ---
 
@@ -36,7 +37,7 @@ Each repository implements the interface of the same name declared in `PFP.Appli
 | A single-entity lookup used by a mutating Handler stays tracked (no `.AsNoTracking()`) | The Handler needs the tracked instance to mutate and save it without a second round trip. The same tracked lookup is often reused by a read-only detail-view Handler as well — see each section below; sharing one method for both is intentional, not an oversight. |
 | A list-returning method used only by Query handlers gets `.AsNoTracking()` and an explicit `.OrderBy(...)` | No tracking overhead for read-only paths; an explicit order keeps the result stable across calls (SQL Server does not guarantee row order without one). |
 | `GetByIdAsync` on an aggregate root with child collections adds `.Include(...)` for those collections | The Handler expects the full aggregate; without it, the child collections would silently come back empty. |
-| No repository calls `SaveChangesAsync()` itself | Persistence is committed once, at the end of a Handler, through `IUnitOfWork`. See [Section 10](#10-unit-of-work-and-transaction-boundary). |
+| No repository calls `SaveChangesAsync()` itself | Persistence is committed once, at the end of a Handler, through `IUnitOfWork`. See [Section 11](#11-unit-of-work-and-transaction-boundary). |
 
 ---
 
@@ -131,7 +132,7 @@ The repository is named after the use case, `SupplierQuote`, not after the entit
 | `GetBySupplierIdAsync(int supplierId, ct)` | `AsNoTracking`, ordered by `SentAt` descending | `GetSupplierQuoteHistoryQueryHandler` (`/suppliers/me/quotes`) |
 | `Add(SupplierQuoteCopy supplierQuoteCopy)` | — | Called up to three times inside `CreatePurchaseRequestCommandHandler`, once per supplier the PR is distributed to |
 
-No `GetAllAsync`: there is no use case anywhere in this system for "every quote copy across every supplier" as a single list — see [Section 11](#11-repository-design-rule).
+No `GetAllAsync`: there is no use case anywhere in this system for "every quote copy across every supplier" as a single list — see [Section 12](#12-repository-design-rule).
 
 ---
 
@@ -161,7 +162,21 @@ No `Remove`: a `PurchaseOrder` is never deleted once created — a failed AutoCo
 
 ---
 
-## 10. Unit of Work and Transaction Boundary
+## 10. EmailSettingsRepository
+
+**Status: implemented.**
+
+| Method | Tracking | Used for |
+|---|---|---|
+| `GetAsync(ct)` | Tracked | Both `GetEmailSettingsQueryHandler` (the settings page's read side) and `UpdateEmailSettingsCommandHandler` (load, mutate, save) — one method serves both, the same pattern `ApprovalSettingRepository.GetByLevelAsync` already uses for its own single-row lookups |
+
+Unlike the eight repositories above, `EmailSettings` is not one of the Scope Document's business aggregate roots (the PR → RQ → PO procurement flow) — it is a system configuration singleton, in the same spirit as `ApprovalSettingRepository`'s two-row table, just with exactly one row (`Id = 1`, fixed — see `Configurations.md` Section 16 for why that needed `ValueGeneratedNever()`). No `Add`: the row is created once by `ApplicationDbContextSeed.cs`, never through a Command. No `GetAllAsync`: there is only ever one row to get. No `Remove`: the settings page always has something to show and edit in place, even before the client has filled in real SMTP values.
+
+`ISecretProtector` (implemented by `DataProtectionSecretProtector`, not a repository) handles encrypting the password before `UpdateEmailSettingsCommandHandler` saves it and decrypting it when `SmtpEmailService` actually needs to authenticate — this repository just moves `EncryptedPassword` as an opaque string, the same as any other column.
+
+---
+
+## 11. Unit of Work and Transaction Boundary
 
 All nine repositories operate against the same `ApplicationDbContext` instance, scoped per request. A Handler follows one shape:
 
@@ -183,7 +198,7 @@ No repository calls `SaveChangesAsync()` on its own. Committing is the Handler's
 
 ---
 
-## 11. Repository Design Rule
+## 12. Repository Design Rule
 
 A repository method exists because a real Application use case requires it — this document does not add methods to round out a "complete" CRUD surface. Methods intentionally absent unless a concrete use case introduces them:
 
@@ -200,7 +215,7 @@ If a new feature needs one of these, the method should be added together with th
 
 ---
 
-## 12. Repository-to-Use-Case Reference Table
+## 13. Repository-to-Use-Case Reference Table
 
 | Repository | Method | Main Use Case |
 |---|---|---|
@@ -233,10 +248,11 @@ If a new feature needs one of these, the method should be added together with th
 | PurchaseOrder | `GetByIdAsync` | Get by Id / Sync PO to AutoCount |
 | PurchaseOrder | `GetAllAsync` | Get Purchase Orders |
 | PurchaseOrder | `Add` | Create PO from Approved RQ |
+| EmailSettings | `GetAsync` | Get / Update Email Settings |
 
 ---
 
-## 13. End-to-End Procurement Flow
+## 14. End-to-End Procurement Flow
 
 ```mermaid
 flowchart TD

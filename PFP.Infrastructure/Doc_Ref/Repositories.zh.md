@@ -1,6 +1,6 @@
 # Repository 设计参考
 
-**每个Repository一节，覆盖`Persistence/Repositories/`下的每一个实现。** 写这份文档的时候，八个Repository全部已经实现、也已经接进DI（`DependencyInjection.cs`）——整个项目的状态见`Infrastructure.zh.md`。把`Features/`里各个Handler的方法体真正写出来，这一块还是尚未完成的工作；本文档里提到的每个Handler类都已经作为脚手架存在（命名空间对、类名对、方法体是空的），它们的存在本身就说明了"这个Repository方法是打算被谁调用的"。
+**每个Repository一节，覆盖`Persistence/Repositories/`下的每一个实现。** 写这份文档的时候，九个Repository全部已经实现、也已经接进DI（`DependencyInjection.cs`）——整个项目的状态见`Infrastructure.zh.md`。把`Features/`里各个Handler的方法体真正写出来，这一块还是尚未完成的工作；本文档里提到的每个Handler类都已经作为脚手架存在（命名空间对、类名对、方法体是空的），它们的存在本身就说明了"这个Repository方法是打算被谁调用的"。
 
 每个Repository都实现`PFP.Application/Abstractions/Persistence/`里同名的接口。本文档假设你已经了解下面这批通用规范，每个Repository那一节不会重复讲一遍，只讲这个Repository特有的东西。
 
@@ -17,10 +17,11 @@
 7. [SupplierQuoteRepository](#7-supplierquoterepository)——已实现
 8. [RequestQuotationRepository](#8-requestquotationrepository)——已实现
 9. [PurchaseOrderRepository](#9-purchaseorderrepository)——已实现
-10. [Unit of Work与事务边界](#10-unit-of-work与事务边界)
-11. [Repository设计原则](#11-repository设计原则)
-12. [Repository对应用例参照表](#12-repository对应用例参照表)
-13. [端到端采购流程](#13-端到端采购流程)
+10. [EmailSettingsRepository](#10-emailsettingsrepository)——已实现
+11. [Unit of Work与事务边界](#11-unit-of-work与事务边界)
+12. [Repository设计原则](#12-repository设计原则)
+13. [Repository对应用例参照表](#13-repository对应用例参照表)
+14. [端到端采购流程](#14-端到端采购流程)
 
 ---
 
@@ -36,7 +37,7 @@
 | 被某个会修改数据的Handler使用的单条查询，保持追踪状态（不加`.AsNoTracking()`） | Handler需要这个追踪中的实例去改属性、存盘，不需要再多查一次。同一个方法往往也被一个只读的详情页Handler复用——见下面各节；一个方法两边共用是刻意设计，不是漏掉了什么。 |
 | 只被Query使用的列表查询，加`.AsNoTracking()`，并且显式加`.OrderBy(...)` | 只读路径不需要追踪开销；显式排序能保证结果顺序稳定（SQL Server在没有`ORDER BY`的情况下不保证行的顺序）。 |
 | 聚合根的`GetByIdAsync`如果带子集合，加对应的`.Include(...)` | Handler期待拿到完整的聚合根，不加的话子集合会悄悄变成空的。 |
-| 任何Repository自己都不调用`SaveChangesAsync()` | 存盘只在一个Handler的末尾发生一次，通过`IUnitOfWork`统一提交。见[第10节](#10-unit-of-work与事务边界)。 |
+| 任何Repository自己都不调用`SaveChangesAsync()` | 存盘只在一个Handler的末尾发生一次，通过`IUnitOfWork`统一提交。见[第11节](#11-unit-of-work与事务边界)。 |
 
 ---
 
@@ -131,7 +132,7 @@
 | `GetBySupplierIdAsync(int supplierId, ct)` | `AsNoTracking`，按`SentAt`倒序 | `GetSupplierQuoteHistoryQueryHandler`（`/suppliers/me/quotes`） |
 | `Add(SupplierQuoteCopy supplierQuoteCopy)` | —— | 在`CreatePurchaseRequestCommandHandler`内部最多调用三次，一个供应商一次 |
 
-没有`GetAllAsync`：这个系统里没有任何用例需要"查所有供应商的所有报价副本"这种全表列表——见[第11节](#11-repository设计原则)。
+没有`GetAllAsync`：这个系统里没有任何用例需要"查所有供应商的所有报价副本"这种全表列表——见[第12节](#12-repository设计原则)。
 
 ---
 
@@ -161,7 +162,21 @@
 
 ---
 
-## 10. Unit of Work与事务边界
+## 10. EmailSettingsRepository
+
+**状态：已实现。**
+
+| 方法 | 追踪状态 | 用在哪 |
+|---|---|---|
+| `GetAsync(ct)` | 追踪 | `GetEmailSettingsQueryHandler`（设置页的读取那一侧）和`UpdateEmailSettingsCommandHandler`（查出来、改属性、存盘）共用同一个方法——跟`ApprovalSettingRepository.GetByLevelAsync`对自己那张单行查询用的是同一套模式 |
+
+跟上面八个不一样，`EmailSettings`不是Scope文档里那条PR→RQ→PO采购主线上的业务聚合根——它是一张系统配置的单行表，跟`ApprovalSettingRepository`那张两行表是同一类东西，只是这张永远只有一行（`Id = 1`，固定不变——为什么需要`ValueGeneratedNever()`见`Configurations.zh.md`第16节）。没有`Add`：这一行由`ApplicationDbContextSeed.cs`一次性建好，不通过任何Command创建。没有`GetAllAsync`：永远只有一行,没什么好"查全部"的。没有`Remove`：哪怕客户还没填真实的SMTP信息，设置页也要有东西可以显示、可以原地编辑。
+
+`ISecretProtector`（实现类是`DataProtectionSecretProtector`，不是Repository）负责在`UpdateEmailSettingsCommandHandler`存盘前把密码加密、在`SmtpEmailService`真正要认证的时候把密码解密——这个Repository只是把`EncryptedPassword`当成一个不透明的字符串搬来搬去，跟其它任何一列没有区别。
+
+---
+
+## 11. Unit of Work与事务边界
 
 九个Repository全部共用同一个按请求生命周期创建的`ApplicationDbContext`实例。一个Handler的形状是固定的：
 
@@ -183,7 +198,7 @@ flowchart TD
 
 ---
 
-## 11. Repository设计原则
+## 12. Repository设计原则
 
 Repository方法的存在，是因为某个真实的Application用例需要它——本文档不会为了凑出一套"完整"的CRUD而加方法。以下方法在没有具体用例引入之前，是刻意不存在的：
 
@@ -200,7 +215,7 @@ GetAllWithEverythingAsync()
 
 ---
 
-## 12. Repository对应用例参照表
+## 13. Repository对应用例参照表
 
 | Repository | 方法 | 主要用例 |
 |---|---|---|
@@ -233,10 +248,11 @@ GetAllWithEverythingAsync()
 | PurchaseOrder | `GetByIdAsync` | 查询详情 / 同步到AutoCount |
 | PurchaseOrder | `GetAllAsync` | PO列表 |
 | PurchaseOrder | `Add` | 从已批准的RQ创建PO |
+| EmailSettings | `GetAsync` | 查询 / 修改邮件设置 |
 
 ---
 
-## 13. 端到端采购流程
+## 14. 端到端采购流程
 
 ```mermaid
 flowchart TD

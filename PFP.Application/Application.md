@@ -6,11 +6,11 @@
 |---|---|
 | Project | `PFP.Application` |
 | Depends on | `PFP.Domain` |
-| Depended on by | `PFP.Infrastructure`, `PFP.WebApi` (not yet created) |
-| Status | Foundation complete; `Users` module implemented; remaining 8 feature modules scaffolded only |
+| Depended on by | `PFP.Infrastructure` (implemented), `PFP.Host` (exists, wired to DI, no Endpoints yet) |
+| Status | Foundation complete; `Users` and `Settings/EmailSettings` modules implemented; remaining 7 feature modules scaffolded only |
 | Audience | Backend maintainers, incoming contributors |
 
-Enum definitions (`Role`, `PRStatus`, etc.) are documented in `PFP.Domain/Domain.md` and are not repeated here. The HTTP API contract (routes, request/response bodies, status codes) is a `PFP.WebApi` concern, not this layer's — it is documented in `pfp_project/DATA-MODEL.md` today and will move to `PFP.WebApi`'s own document once that project exists.
+Enum definitions (`Role`, `PRStatus`, etc.) are documented in `PFP.Domain/Domain.md` and are not repeated here. The HTTP API contract (routes, request/response bodies, status codes) is a `PFP.Host` concern, not this layer's — it is documented in `pfp_project/DATA-MODEL.md` today and will move to `PFP.Host`'s own document once its Endpoints exist.
 
 ---
 
@@ -34,16 +34,16 @@ Enum definitions (`Role`, `PRStatus`, etc.) are documented in `PFP.Domain/Domain
 ## 1. Position in the Architecture
 
 ```
-PFP.WebApi (not yet created)  →  PFP.Application  →  PFP.Domain
-                                        ↑
-                                PFP.Infrastructure (not yet created;
-                                implements the interfaces defined here)
+PFP.Host (exists, no Endpoints yet)  →  PFP.Application  →  PFP.Domain
+                                              ↑
+                                      PFP.Infrastructure (implemented;
+                                      implements the interfaces defined here)
 ```
 
 - **`PFP.Domain`** — entities, enums, and marker interfaces only. Zero framework dependencies; has no knowledge of `PFP.Application`.
 - **`PFP.Application`** (this project) — depends on `PFP.Domain`. Defines the capabilities required from the outside world (persistence, password hashing, email) as interfaces, without implementing them.
-- **`PFP.Infrastructure`** (not yet created) — depends on `PFP.Application`. Provides concrete implementations (EF Core, SMTP, AutoCount API client).
-- **`PFP.WebApi`** (not yet created) — depends on both. Endpoints do nothing but forward requests: `sender.Send(new XxxCommand(...))`.
+- **`PFP.Infrastructure`** — depends on `PFP.Application`. Provides concrete implementations (EF Core, SMTP via `IEmailSettingsRepository`/`ISecretProtector`, AutoCount API client — currently `MockAutoCountService`). See `PFP.Infrastructure/Doc_Ref/Infrastructure.md` for full detail.
+- **`PFP.Host`** — depends on both, and both are wired into its DI container (`AddApplicationServices()`, `AddInfrastructureServices()`, plus `SeedInfrastructureAsync()` at startup). What it does not yet have is any Endpoint or Controller — `Program.cs` has no route that maps to `sender.Send(new XxxCommand(...))`, so nothing in this project is reachable over HTTP today even though every layer beneath it compiles, runs, and is backed by a real database.
 
 This inversion of dependencies means the business logic in `PFP.Application` can be exercised in isolation — a test can supply a fake `IUserRepository` and run a Handler without a database.
 
@@ -72,10 +72,13 @@ PFP.Application/
 │   │   ├── ISupplierQuoteRepository.cs
 │   │   ├── IRequestQuotationRepository.cs
 │   │   ├── IPurchaseOrderRepository.cs
+│   │   ├── IEmailSettingsRepository.cs
 │   │   └── IUnitOfWork.cs
 │   └── Services/
 │       ├── ICurrentUserService.cs
 │       ├── IPasswordHasher.cs
+│       ├── ITokenService.cs
+│       ├── ISecretProtector.cs
 │       ├── IDocumentNumberGenerator.cs
 │       └── IEmailService.cs
 │
@@ -130,6 +133,11 @@ PFP.Application/
     │   ├── ApprovalSettingDto.cs
     │   ├── Commands/UpdateApprovalSettings/
     │   └── Queries/GetApprovalSettings/
+    ├── Settings/
+    │   └── EmailSettings/
+    │       ├── EmailSettingsDto.cs
+    │       ├── Commands/UpdateEmailSettings/
+    │       └── Queries/GetEmailSettings/
     ├── PurchaseRequests/
     │   ├── PurchaseRequestDto.cs
     │   ├── Commands/{CreatePurchaseRequest, ApprovePurchaseRequest, RejectPurchaseRequest}/
@@ -157,8 +165,8 @@ PFP.Application/
 | Subfolder | Responsibility |
 |---|---|
 | `Messaging/` | The request-dispatch contract: how a request travels from the caller to the Handler that processes it. |
-| `Persistence/` | Data-access contracts. One repository per aggregate root, not per entity — child entities (`PurchaseRequestItem`, `RQApproval`, etc.) are always queried and mutated through the repository of the aggregate root they belong to. |
-| `Services/` | External capabilities unrelated to persistence: current-user context, password hashing, document-number generation, email delivery. |
+| `Persistence/` | Data-access contracts. One repository per aggregate root, not per entity — child entities (`PurchaseRequestItem`, `RQApproval`, etc.) are always queried and mutated through the repository of the aggregate root they belong to. `IEmailSettingsRepository` is the one exception: `EmailSettings` isn't a business aggregate root from the Scope Document's procurement flow, it's a system configuration singleton (like `ApprovalSetting`), so it gets a repository for the same reason `ApprovalSetting` does — see `PFP.Infrastructure/Doc_Ref/Repositories.md`. |
+| `Services/` | External capabilities unrelated to persistence: current-user context, password hashing, JWT issuance (`ITokenService`), secret encryption (`ISecretProtector`), document-number generation, email delivery. |
 
 ### `Internal/Messaging/` — implementation of the `Abstractions/Messaging` contracts
 
@@ -254,6 +262,7 @@ sequenceDiagram
 | **Suppliers** | `CreateSupplier`, `InviteSupplier`, `CompleteSupplierRegistration`, `SyncSuppliersFromAutoCount` | `GetSuppliers`, `GetSupplierById`, `GetSupplierQuoteHistory` |
 | **Items** | `SyncItemsFromAutoCount` | `GetItems`, `GetItemById` |
 | **ApprovalSettings** | `UpdateApprovalSettings` | `GetApprovalSettings` |
+| **Settings/EmailSettings** | `UpdateEmailSettings` | `GetEmailSettings` |
 | **PurchaseRequests** | `CreatePurchaseRequest`, `ApprovePurchaseRequest`, `RejectPurchaseRequest` | `GetPurchaseRequests`, `GetPurchaseRequestById` |
 | **SupplierQuotes** | `SubmitSupplierQuote` | `GetSupplierQuoteByToken` |
 | **RequestQuotations** | `CreateFromApprovedPR` *(internal)*, `ApproveRequestQuotation`, `RejectRequestQuotation`, `ConvertToPurchaseOrder` | `GetRequestQuotations`, `GetRequestQuotationById` |
@@ -302,7 +311,7 @@ Worked example: adding an "archive purchase request" operation.
 4. **Add a Validator if the Command carries a body** — `ArchivePurchaseRequestCommandValidator : AbstractValidator<ArchivePurchaseRequestCommand>`. Omit it for parameterless, id-only operations.
 5. **Write the Handler** — inject the required repositories/services, load the entity, enforce business rules (`throw` the matching `Common/Exceptions` type on violation), mutate state, call `SaveChangesAsync`, and return the Dto.
 6. **No manual registration required.** `DependencyInjection.cs` discovers new `IRequestHandler<,>` implementations via assembly reflection, and `AddValidatorsFromAssembly` discovers new Validators the same way.
-7. **Once `PFP.WebApi` exists**, wire it into the corresponding `Endpoints/XxxEndpoints.cs` with `sender.Send(new ArchivePurchaseRequestCommand(...))`.
+7. **Once `PFP.Host` has an Endpoint layer**, wire it into the corresponding `Endpoints/XxxEndpoints.cs` with `sender.Send(new ArchivePurchaseRequestCommand(...))`.
 
 ---
 
@@ -310,16 +319,17 @@ Worked example: adding an "archive purchase request" operation.
 
 | Component | Status |
 |---|---|
-| `Abstractions/` (Messaging + Persistence + Services) | Fully defined |
+| `Abstractions/` (Messaging + Persistence + Services) | Fully defined, including `IEmailSettingsRepository`/`ISecretProtector`/`ITokenService`, added alongside the SMTP settings-page feature |
 | `Internal/Messaging/` (Sender + Wrapper) | Implemented, builds successfully |
 | `Common/` (Authorization + Behaviours + Exceptions + Results) | Implemented |
-| `Integrations/AutoCount/` | Interface and four DTOs defined |
+| `Integrations/AutoCount/` | Interface and four DTOs defined; `PFP.Infrastructure` currently backs it with `MockAutoCountService`, not a real HTTP client |
 | `Features/Users/` | Implemented (`CreateUser`, `UpdateUserRole`, `ActivateUser`, `DeactivateUser`, `GetUserById`, `GetUsers`) |
-| `Features/` — remaining 8 modules | Command/Query scaffolding only; Handler logic not yet written |
-| `PFP.Infrastructure` | Project created; `DbContext` and two of fourteen `Configuration` files implemented — see `PFP.Infrastructure/Infrastructure.md` for the current detail |
-| `PFP.WebApi` (Endpoints, `Program.cs` wiring) | Not yet created |
+| `Features/Settings/EmailSettings/` | Implemented (`UpdateEmailSettings`, `GetEmailSettings`) — closes the Scope Document's client-configurable SMTP settings page requirement; see `PFP.Infrastructure/Doc_Ref/Infrastructure.md` Section 1 |
+| `Features/` — remaining 7 modules | Command/Query scaffolding only; Handler logic not yet written |
+| `PFP.Infrastructure` | Fully implemented — all 9 repositories, all 15 `Configuration` files, `DependencyInjection.cs` wired, seed data verified against a real SQL Server LocalDB database. See `PFP.Infrastructure/Doc_Ref/Infrastructure.md` for full detail. |
+| `PFP.Host` (Endpoints, `Program.cs` wiring) | Project exists and runs — `AddApplicationServices()`, `AddInfrastructureServices()`, and `SeedInfrastructureAsync()` are all called at startup, confirmed by actually running it against the real database. No Endpoints or Controllers exist yet — nothing maps a route to `sender.Send(new XxxCommand(...))`. |
 
-No HTTP layer exists yet — `PFP.WebApi` has not been created — so nothing in this project can be invoked over HTTP today, regardless of what `pfp_project/DATA-MODEL.md`'s API route table says is planned. The only feature with a fully working chain from repository interface to Handler is `Users`.
+No HTTP layer exists yet — not because `PFP.Host` doesn't exist (it does, and runs), but because it has no Endpoints or Controllers wired to `ISender` — so nothing in this project can be invoked over HTTP today, regardless of what `pfp_project/DATA-MODEL.md`'s API route table says is planned. The only features with a fully working chain from repository interface to Handler are `Users` and `Settings/EmailSettings`.
 
 ---
 
@@ -332,6 +342,14 @@ Discrepancies between the originally recorded design (`DATA-MODEL.md`) and the a
 | 1 | `CreateUserCommand.Department` | Optional — only meaningful for the `Requester` role | `string`, required for every role | Open — decide whether to relax the field to optional or formally adopt the current required behavior |
 
 This table will grow as further modules move from scaffold to implementation and get cross-checked the same way.
+
+**Scaffold bugs found and fixed while cross-checking `Features/` against real source files** (not design deviations — plain copy-paste errors in the generated scaffolding, unrelated to `DATA-MODEL.md`):
+
+- `ApprovalSettingDto.cs` was namespaced under `PFP.Application.Features.Items` instead of `...Features.ApprovalSettings`.
+- `CreatePurchaseRequestCommand.cs`, `CreatePurchaseRequestCommandHandler.cs`, and `CreatePurchaseRequestCommandValidator.cs` were all namespaced under `...Commands.ApprovePurchaseRequest` instead of `...Commands.CreatePurchaseRequest`.
+- `CreateSupplierCommand.cs` was namespaced under `...Features.Users.Commands.ActivateUser` instead of `...Features.Suppliers.Commands.CreateSupplier`.
+
+None of these broke the build (C# doesn't require a namespace to match its folder path), but each would have been a real landmine the moment real code was written in those files or anything resolved types by namespace convention. All three fixed; caught by scanning every `Features/` file's declared namespace against its folder path.
 
 ---
 

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PFP.Application")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a184b72d0ce165afb970350c9c39232ce47fc4db")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0acbc73c3c84da34b58923c9497bb7c169805268")]
 [assembly: System.Reflection.AssemblyProductAttribute("PFP.Application")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PFP.Application")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

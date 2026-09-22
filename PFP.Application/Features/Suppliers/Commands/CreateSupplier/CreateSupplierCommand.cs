@@ -1,4 +1,4 @@
-﻿namespace PFP.Application.Features.Users.Commands.ActivateUser
+﻿namespace PFP.Application.Features.Suppliers.Commands.CreateSupplier
 {
     public class CreateSupplierCommand
     {

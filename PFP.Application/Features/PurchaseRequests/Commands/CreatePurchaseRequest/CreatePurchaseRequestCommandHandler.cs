@@ -1,4 +1,4 @@
-﻿namespace PFP.Application.Features.PurchaseRequests.Commands.ApprovePurchaseRequest
+﻿namespace PFP.Application.Features.PurchaseRequests.Commands.CreatePurchaseRequest
 {
     public class CreatePurchaseRequestCommandHandler
     {

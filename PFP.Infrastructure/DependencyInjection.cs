@@ -11,7 +11,9 @@ using PFP.Infrastructure.Options;
 using PFP.Infrastructure.Persistence;
 using PFP.Infrastructure.Persistence.Database;
 using PFP.Infrastructure.Persistence.DocumentNumbers;
+using PFP.Infrastructure.Persistence.Database.Seed;
 using PFP.Infrastructure.Persistence.Repositories;
+using PFP.Infrastructure.Security;
 
 namespace PFP.Infrastructure;
 
@@ -24,11 +26,26 @@ public static class DependencyInjection
         AddDatabase(services, configuration);
         AddRepositories(services);
         AddIdentity(services, configuration);
-        AddEmail(services, configuration);
+        AddEmail(services);
         AddDocumentNumbers(services);
         AddAutoCount(services, configuration);
 
         return services;
+    }
+
+    // Called once at startup from Program.cs, after the DI container is built - not part
+    // of AddInfrastructureServices itself, since seeding needs a live ApplicationDbContext
+    // and ISecretProtector instance, not just their registrations.
+    public static async Task SeedInfrastructureAsync(
+        this IServiceProvider serviceProvider,
+        CancellationToken cancellationToken = default)
+    {
+        using var scope = serviceProvider.CreateScope();
+
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var secretProtector = scope.ServiceProvider.GetRequiredService<ISecretProtector>();
+
+        await ApplicationDbContextSeed.SeedAsync(dbContext, secretProtector, cancellationToken);
     }
 
     private static void AddDatabase(
@@ -59,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<IPurchaseOrderRepository, PurchaseOrderRepository>();
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IEmailSettingsRepository, EmailSettingsRepository>();
     }
 
     private static void AddIdentity(
@@ -76,11 +94,13 @@ public static class DependencyInjection
     }
 
     private static void AddEmail(
-        IServiceCollection services,
-        IConfiguration configuration)
+        IServiceCollection services)
     {
-        services.Configure<EmailOptions>(
-            configuration.GetSection(EmailOptions.SectionName));
+        // SMTP settings live in the database (see EmailSettings), editable at runtime
+        // through the settings page - not static configuration. Data Protection secures
+        // the stored password; see DataProtectionSecretProtector for the key-ring caveat.
+        services.AddDataProtection();
+        services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
 
         services.AddScoped<IEmailService, SmtpEmailService>();
     }

@@ -7,7 +7,7 @@
 | Project | `PFP.Domain` |
 | Depends on | Nothing |
 | Depended on by | `PFP.Application` (and, transitively, everything above it) |
-| Status | 14 entities, 9 enums, 6 marker interfaces — all present and building |
+| Status | 15 entities, 9 enums, 6 marker interfaces — all present and building |
 | Audience | Backend maintainers, frontend integrators, incoming contributors |
 
 Application-layer architecture (Behaviours, Repositories, request pipeline) is documented separately in `PFP.Application/Application.md` and is not repeated here.
@@ -37,7 +37,7 @@ Application-layer architecture (Behaviours, Repositories, request pipeline) is d
 
 ## 2. Entity Relationship Diagram
 
-The same 14 entities as `PFP.Infrastructure/Infrastructure.md`'s diagram, but in purely business terms — no delete behavior, no persistence detail. See that document if you need the EF Core / SQL Server side of these same relationships.
+The same relational entities as `PFP.Infrastructure/Infrastructure.md`'s diagram, but in purely business terms — no delete behavior, no persistence detail. See that document if you need the EF Core / SQL Server side of these same relationships.
 
 ```mermaid
 erDiagram
@@ -48,7 +48,7 @@ erDiagram
     PurchaseRequest ||--o{ PurchaseRequestDetail : "line items"
     PurchaseRequest ||--o{ SupplierQuoteCopy : "distributed to up to 3 suppliers as"
     PurchaseRequest |o--o| SupplierQuoteCopy : selects
-    PurchaseRequest ||--o{ RequestQuotation : "converts into"
+    PurchaseRequest ||--o| RequestQuotation : "converts into"
 
     Supplier ||--o{ SupplierQuoteCopy : receives
     Supplier ||--o{ RequestQuotation : "quoted for"
@@ -64,9 +64,9 @@ erDiagram
     PurchaseOrder ||--o{ PurchaseOrderDetail : "line items (snapshot)"
 ```
 
-`Item` (material master data) and `Counter` (document number sequence generator) have no foreign-key relationship to anything else and are omitted — `Item` is only referenced by string code snapshot (`PurchaseRequestDetail.ItemCode`), not a real foreign key.
+`Item` (material master data), `Counter` (document number sequence generator), `ApprovalSetting` (2-row approval configuration), and `EmailSettings` (single-row SMTP configuration) have no foreign-key relationship to anything else and are omitted — `Item` is only referenced by string code snapshot (`PurchaseRequestDetail.ItemCode`), not a real foreign key.
 
-Two of the relationships above are drawn as "1 to many" in this diagram because that is how the C# navigation properties are currently typed, even though the business rule behind them is "1 to 0-or-1": `PurchaseRequest -> RequestQuotation` (a request converts into at most one quotation) and `RequestQuotation -> PurchaseOrder` (a quotation converts into at most one order). See the Known Issues section for the tracked correction.
+Both `PurchaseRequest -> RequestQuotation` and `RequestQuotation -> PurchaseOrder` are drawn above as "1 to 0-or-1" (`||--o|`) and that is now also what the C# navigation properties are typed as — this was an open Known Issue in earlier versions of this document (both were previously typed as collections); it is resolved, and `PFP.Infrastructure`'s applied migration additionally enforces both at the database level with `UNIQUE` indexes (see `Infrastructure.md` Section 3).
 
 ---
 
@@ -94,7 +94,8 @@ PFP.Domain/
 │   │   ├── PurchaseOrder.cs
 │   │   └── PurchaseOrderDetail.cs
 │   ├── ApprovalSetting.cs
-│   └── Counter.cs
+│   ├── Counter.cs
+│   └── EmailSettings.cs
 ├── Enums/
 │   ├── Role.cs
 │   ├── PRStatus.cs
@@ -126,9 +127,9 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 |---|---|---|
 | `Role` | `Requester`, `PurchaseManager`, `DirectorL1`, `DirectorL2`, `HeadOfPurchase` | `User.Role`, `ApprovalSetting.ApproverRole` |
 | `PRStatus` | `Quoting`, `PmReview`, `Approved`, `Rejected`, `Converted` | `PurchaseRequest.Status` |
-| `Copystatus` (note: spelled with lowercase "s", not `CopyStatus` -- see Known Issues item 4) | `Pending`, `Submitted` | `SupplierQuoteCopy.Status` -- one-way, non-reversible |
+| `CopyStatus` | `Pending`, `Submitted` | `SupplierQuoteCopy.Status` -- one-way, non-reversible |
 | `RQStatus` | `PendingL1`, `PendingL2`, `Approved`, `Rejected`, `Converted` | `RequestQuotation.Status` |
-| `ApprovalLevel` | `L1`, `L2` | `RQApproval.Level`, `ApprovalSetting.level` |
+| `ApprovalLevel` | `L1`, `L2` | `RQApproval.Level`, `ApprovalSetting.Level` |
 | `ApprovalAction` | `Approved`, `Rejected` | `RQApproval.Action` |
 | `POStatus` | `Created`, `Synced`, `SyncFailed` | `PurchaseOrder.Status` |
 | `SupplierAccountStatus` | `Invited`, `Registered`, `Suspended` | `Supplier.AccountStatus` |
@@ -156,7 +157,7 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 
 | Field | Type |
 |---|---|
-| Id | int (required — see the corresponding section below, item 7) |
+| Id | int |
 | Name | string |
 | Email | string |
 | Contact | string? |
@@ -199,7 +200,7 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 | RowVersion | byte[] |
 | Items | ICollection\<PurchaseRequestDetail\> |
 | SupplierQuoteCopies | ICollection\<SupplierQuoteCopy\> |
-| RequestQuotations | ICollection\<RequestQuotation\> |
+| RequestQuotations | RequestQuotation? — a request converts into at most one quotation |
 
 ### `PurchaseRequestDetail`
 
@@ -235,9 +236,8 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 | Field | Type |
 |---|---|
 | Id | int |
-| SupplierQuoteCopyId / supplierQuoteCopy | int / SupplierQuoteCopy |
-| PurchaseRequestItemId | int |
-| purchaseRequest | PurchaseRequest — type does not match the foreign key, see the corresponding section below, item 2 |
+| SupplierQuoteCopyId / SupplierQuoteCopy | int / SupplierQuoteCopy |
+| PurchaseRequestItemId / PurchaseRequestDetail | int / PurchaseRequestDetail |
 | UnitPrice | decimal |
 
 ### `RequestQuotation`
@@ -255,7 +255,7 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 | RowVersion | byte[] |
 | Items | ICollection\<RequestQuotationDetail\> |
 | Approvals | ICollection\<RQApproval\> |
-| PurchaseOrder | ICollection\<PurchaseOrder\> — relationship is 1:1, collection type is incorrect; see the corresponding section below, item 3 |
+| PurchaseOrder | PurchaseOrder? — a quotation converts into at most one order |
 
 ### `RequestQuotationDetail` — snapshot
 
@@ -311,7 +311,7 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 
 | Field | Type |
 |---|---|
-| level | ApprovalLevel — lowercase, see the corresponding section below, item 5 |
+| Level | ApprovalLevel (primary key) |
 | ApproverRole | Role |
 | MinAmount | decimal |
 | MaxAmount | decimal? |
@@ -322,6 +322,20 @@ Enum values serialize to JSON as strings (e.g. `"role": "HeadOfPurchase"`), not 
 |---|---|
 | Name | string (primary key — `"PR"` / `"RQ"` / `"PO"`) |
 | Seq | int |
+
+### `EmailSettings` — single-row SMTP configuration
+
+Backs the client-configurable "settings page" the Scope Document's Out-of-Scope clause requires ("Email SMTP setup is not included; only the settings page ... is provided"). See `Infrastructure.md` Section 1 for the full feature (`ISecretProtector`, encryption) and `Application.md` for the `Features/Settings/EmailSettings/` Command/Query pair that exposes it.
+
+| Field | Type |
+|---|---|
+| Id | int (primary key, always `1` — a single row) |
+| Host | string |
+| Port | int |
+| Username | string |
+| EncryptedPassword | string — never plaintext; protected via `ISecretProtector` at the Application/Infrastructure boundary, not by this entity |
+| FromEmail | string |
+| FromName | string |
 
 ---
 
@@ -357,7 +371,7 @@ stateDiagram-v2
     Converted --> [*]
 ```
 
-Whether every `RequestQuotation` must pass through both `PendingL1` and `PendingL2`, or whether a small enough amount can go straight from `PendingL1` to `Approved`, is an open question raised against the Scope Document — see `Application.md`'s API surface notes for the Purchase Order Conversion clause.
+Whether every `RequestQuotation` must pass through both `PendingL1` and `PendingL2`, or whether a small enough amount can go straight from `PendingL1` to `Approved`, is an open question raised against the Scope Document — see `Application.md`'s End-to-End Business Flow section, which flags the same branch.
 
 ### `SupplierQuoteCopy.Status` (`Copystatus`)
 
@@ -389,7 +403,7 @@ stateDiagram-v2
 
 | Interface | Definition | Implemented by |
 |---|---|---|
-| `IEntity` | `int Id { get; }` | Most entities. `ApprovalSetting` (keyed by `Level`) and `Counter` (keyed by `Name`) do not implement it. |
+| `IEntity` | `int Id { get; }` | Most entities, including `EmailSettings` (its `Id` is fixed at `1`, but it is still a real `int Id`, unlike the two exceptions). `ApprovalSetting` (keyed by `Level`) and `Counter` (keyed by `Name`) do not implement it. |
 | `IExposableEntity` | Empty — marks "mapped to a Dto for output" | All entities except `Counter`. |
 | `IBaseEntity` | `IEntity` + `ICreationAuditable` | Entities that also track a creation timestamp. |
 | `IBaseExposableEntity` | `IBaseEntity` + `IExposableEntity` | Same set as above. |
@@ -407,12 +421,12 @@ Discrepancies found while cross-checking this document against the real source f
 | # | Location | Issue | Impact |
 |---|---|---|---|
 | 1 | `PurchaseRequest.RequesterId` | Resolved — previously misnamed `RequestedId`; now matches the paired navigation property `Requester`. | — |
-| 2 | `SupplierQuoteDetail.purchaseRequest` | Typed as `PurchaseRequest`, but the paired foreign key is `PurchaseRequestItemId`; the navigation property should be typed `PurchaseRequestDetail` | Type/FK mismatch — a source of confusion when this relationship is configured in EF Core |
-| 3 | `RequestQuotation.PurchaseOrder` | Typed as `ICollection<PurchaseOrder>`, but `PurchaseOrder.RequestQuotationId` establishes a 1:1 relationship (one RQ converts to at most one PO) | Should be `PurchaseOrder?` |
-| 4 | `Enums/CopyStatus.cs` | The type is declared as `Copystatus` (lowercase "s"), inconsistent with the PascalCase convention used by `PRStatus`/`RQStatus`/`POStatus` | Naming convention only |
-| 5 | `ApprovalSetting.level` | Property name starts lowercase, the only property in the codebase that does not follow PascalCase | Naming convention only |
-| 6 | `User.Department`, `PurchaseRequest.Department` | Both are plain `string`; there is no `Department` enum in this project despite `Department` appearing as a documented business concept in the original scope reconciliation | If a frontend expects a fixed set of department values, the backend currently performs no such validation |
-| 7 | `Supplier.Id` | Declared `required int Id` | Forces every `new Supplier { ... }` construction to explicitly assign `Id`, even though it is a database-generated identity value; inconsistent with `User.Id`/`PurchaseRequest.Id`, which are plain `int` |
-| 8 | `PurchaseRequest.RequestQuotations` | Typed as `ICollection<RequestQuotation>`; the Scope Document's Full Flow describes a request converting into *a* quotation (singular), and `CreateFromApprovedPRCommandHandler` is designed as a one-time conversion | Same class of issue as item 3 — likely should be `RequestQuotation?`; unconfirmed |
+| 2 | `SupplierQuoteDetail` navigation | Resolved — the property is now correctly named `PurchaseRequestDetail` and typed `PurchaseRequestDetail`, matching the paired `PurchaseRequestItemId` foreign key (was previously named `purchaseRequest`, typed `PurchaseRequest`). | — |
+| 3 | `RequestQuotation.PurchaseOrder` | Resolved — now a single `PurchaseOrder?`, not a collection; `Infrastructure.md`'s applied migration additionally enforces the 1:1 cardinality at the database level with a `UNIQUE` index on `PurchaseOrder.RequestQuotationId`. | — |
+| 4 | `Enums/CopyStatus.cs` | Resolved — correctly `CopyStatus` (PascalCase); the previous lowercase-`s` spelling has been fixed. | — |
+| 5 | `ApprovalSetting.Level` | Resolved — correctly PascalCase now. | — |
+| 6 | `User.Department`, `PurchaseRequest.Department` | Still open. Both are plain `string`; there is no `Department` enum in this project despite `Department` appearing as a documented business concept in the original scope reconciliation. | If a frontend expects a fixed set of department values, the backend currently performs no such validation. |
+| 7 | `Supplier.Id` | Resolved — now a plain `int Id`, consistent with `User.Id`/`PurchaseRequest.Id`; no longer forces every `new Supplier { ... }` construction to explicitly assign an identity value. | — |
+| 8 | `PurchaseRequest.RequestQuotations` | Resolved — now a single `RequestQuotation?`, not a collection; `Infrastructure.md`'s applied migration additionally enforces the 1:0-or-1 cardinality at the database level with a `UNIQUE` index on `RequestQuotation.PurchaseRequestId`. | — |
 
-Items 2, 3, and 8 involve changing a field type and may have downstream impact once the corresponding `Features/` modules are implemented. Items 4–7 are lower-risk, isolated changes. Item 1 is resolved.
+Item 6 is the only one still open, and is lower-risk than the others were (it's a modeling choice, not a bug) — decide whether `Department` should become an enum once the client confirms the fixed set of departments (Scope Document Assumptions section).

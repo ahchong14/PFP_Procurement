@@ -7,7 +7,7 @@
 | 项目 | `PFP.Domain` |
 | 依赖 | 无 |
 | 被谁依赖 | `PFP.Application`（以及间接地，它之上的所有项目） |
-| 状态 | 14个实体、9个枚举、6个标记接口——全部存在且编译通过 |
+| 状态 | 15个实体、9个枚举、6个标记接口——全部存在且编译通过 |
 | 读者 | 后端维护者、前端对接人员、后续接手的开发者 |
 
 本文档为英文版`Domain.md`的中文对照版本，内容保持一致。Application层的架构说明（Behaviour、Repository、请求管道）记录在`PFP.Application/Application.zh.md`，本文档不重复。
@@ -37,7 +37,7 @@
 
 ## 2. 实体关系图
 
-跟`PFP.Infrastructure/Infrastructure.zh.md`里那张图是同样的14个实体，但这里是纯业务视角——不带删除行为、不带持久化细节。要看这些关系在EF Core/SQL Server层面具体怎么处理，去那份文档。
+跟`PFP.Infrastructure/Infrastructure.zh.md`里那张图是同样的关系型实体，但这里是纯业务视角——不带删除行为、不带持久化细节。要看这些关系在EF Core/SQL Server层面具体怎么处理，去那份文档。
 
 ```mermaid
 erDiagram
@@ -48,7 +48,7 @@ erDiagram
     PurchaseRequest ||--o{ PurchaseRequestDetail : "明细行"
     PurchaseRequest ||--o{ SupplierQuoteCopy : "分发给最多3家供应商"
     PurchaseRequest |o--o| SupplierQuoteCopy : "选定"
-    PurchaseRequest ||--o{ RequestQuotation : "转换成"
+    PurchaseRequest ||--o| RequestQuotation : "转换成"
 
     Supplier ||--o{ SupplierQuoteCopy : "收到"
     Supplier ||--o{ RequestQuotation : "被报价"
@@ -64,9 +64,9 @@ erDiagram
     PurchaseOrder ||--o{ PurchaseOrderDetail : "明细行（快照）"
 ```
 
-`Item`（物料主数据）和`Counter`（单据编号生成器）跟其它任何东西都没有外键关系，图上省略——`Item`只是被字符串编码快照引用（`PurchaseRequestDetail.ItemCode`），不是真正的外键。
+`Item`（物料主数据）、`Counter`（单据编号生成器）、`ApprovalSetting`（两行的审批配置）、`EmailSettings`（单行的SMTP配置）跟其它任何东西都没有外键关系，图上省略——`Item`只是被字符串编码快照引用（`PurchaseRequestDetail.ItemCode`），不是真正的外键。
 
-图上有两条关系被画成"1对多"，是因为C#导航属性现在就是这么定义的，但这两条背后的业务规则其实是"1对0或1"：`PurchaseRequest -> RequestQuotation`（一张PR最多转出一张RQ）和`RequestQuotation -> PurchaseOrder`（一张RQ最多转出一张PO）。具体记录见"已知问题"那一节。
+`PurchaseRequest -> RequestQuotation`和`RequestQuotation -> PurchaseOrder`这两条现在都画成"1对0或1"（`||--o|`），C#导航属性现在也是这么定义的——这在本文档更早的版本里是一个开放的已知问题（两边都曾经是集合类型）；现在已经解决，而且`PFP.Infrastructure`已经应用的迁移还在数据库层面用`UNIQUE`索引额外强制了这两条约束（见`Infrastructure.zh.md`第3节）。
 
 ---
 
@@ -94,7 +94,8 @@ PFP.Domain/
 │   │   ├── PurchaseOrder.cs
 │   │   └── PurchaseOrderDetail.cs
 │   ├── ApprovalSetting.cs
-│   └── Counter.cs
+│   ├── Counter.cs
+│   └── EmailSettings.cs
 ├── Enums/
 │   ├── Role.cs
 │   ├── PRStatus.cs
@@ -126,9 +127,9 @@ PFP.Domain/
 |---|---|---|
 | `Role` | `Requester`、`PurchaseManager`、`DirectorL1`、`DirectorL2`、`HeadOfPurchase` | `User.Role`、`ApprovalSetting.ApproverRole` |
 | `PRStatus` | `Quoting`、`PmReview`、`Approved`、`Rejected`、`Converted` | `PurchaseRequest.Status` |
-| `Copystatus`（注：类型名是小写的"s"，不是`CopyStatus`，详见已知问题第4条） | `Pending`、`Submitted` | `SupplierQuoteCopy.Status`——一次性，不可逆 |
+| `CopyStatus` | `Pending`、`Submitted` | `SupplierQuoteCopy.Status`——一次性，不可逆 |
 | `RQStatus` | `PendingL1`、`PendingL2`、`Approved`、`Rejected`、`Converted` | `RequestQuotation.Status` |
-| `ApprovalLevel` | `L1`、`L2` | `RQApproval.Level`、`ApprovalSetting.level` |
+| `ApprovalLevel` | `L1`、`L2` | `RQApproval.Level`、`ApprovalSetting.Level` |
 | `ApprovalAction` | `Approved`、`Rejected` | `RQApproval.Action` |
 | `POStatus` | `Created`、`Synced`、`SyncFailed` | `PurchaseOrder.Status` |
 | `SupplierAccountStatus` | `Invited`、`Registered`、`Suspended` | `Supplier.AccountStatus` |
@@ -156,7 +157,7 @@ PFP.Domain/
 
 | 字段 | 类型 |
 |---|---|
-| Id | int（必填，见已知问题第7条） |
+| Id | int |
 | Name | string |
 | Email | string |
 | Contact | string? |
@@ -199,7 +200,7 @@ PFP.Domain/
 | RowVersion | byte[] |
 | Items | ICollection\<PurchaseRequestDetail\> |
 | SupplierQuoteCopies | ICollection\<SupplierQuoteCopy\> |
-| RequestQuotations | ICollection\<RequestQuotation\> |
+| RequestQuotations | RequestQuotation?——一张PR最多转出一张RQ |
 
 ### `PurchaseRequestDetail`
 
@@ -235,9 +236,8 @@ PFP.Domain/
 | 字段 | 类型 |
 |---|---|
 | Id | int |
-| SupplierQuoteCopyId / supplierQuoteCopy | int / SupplierQuoteCopy |
-| PurchaseRequestItemId | int |
-| purchaseRequest | PurchaseRequest——类型跟外键对不上，见已知问题第2条 |
+| SupplierQuoteCopyId / SupplierQuoteCopy | int / SupplierQuoteCopy |
+| PurchaseRequestItemId / PurchaseRequestDetail | int / PurchaseRequestDetail |
 | UnitPrice | decimal |
 
 ### `RequestQuotation`
@@ -255,7 +255,7 @@ PFP.Domain/
 | RowVersion | byte[] |
 | Items | ICollection\<RequestQuotationDetail\> |
 | Approvals | ICollection\<RQApproval\> |
-| PurchaseOrder | ICollection\<PurchaseOrder\>——关系本应是1对1，集合类型不准确，见已知问题第3条 |
+| PurchaseOrder | PurchaseOrder?——一张RQ最多转出一张PO |
 
 ### `RequestQuotationDetail`——快照式存储
 
@@ -311,7 +311,7 @@ PFP.Domain/
 
 | 字段 | 类型 |
 |---|---|
-| level | ApprovalLevel——小写开头，见已知问题第5条 |
+| Level | ApprovalLevel（主键） |
 | ApproverRole | Role |
 | MinAmount | decimal |
 | MaxAmount | decimal? |
@@ -322,6 +322,20 @@ PFP.Domain/
 |---|---|
 | Name | string（主键，"PR" / "RQ" / "PO"） |
 | Seq | int |
+
+### `EmailSettings`——单行SMTP配置
+
+支撑客户能自己配置的那个"设置页面"，Scope文档"Out of Scope"那条明确要求提供它（"不包含SMTP的配置工作，只提供设置页面"）。完整功能见`Infrastructure.zh.md`第1节（`ISecretProtector`、加密），暴露它的`Features/Settings/EmailSettings/`那对Command/Query见`Application.zh.md`。
+
+| 字段 | 类型 |
+|---|---|
+| Id | int（主键，永远是`1`——单行） |
+| Host | string |
+| Port | int |
+| Username | string |
+| EncryptedPassword | string——从来不是明文；在Application/Infrastructure的边界上通过`ISecretProtector`加密，不是这个实体自己负责的事 |
+| FromEmail | string |
+| FromName | string |
 
 ---
 
@@ -357,7 +371,7 @@ stateDiagram-v2
     Converted --> [*]
 ```
 
-每张`RequestQuotation`是不是都必须走完`PendingL1`和`PendingL2`两级，还是金额够小可以从`PendingL1`直接到`Approved`，这是对着Scope文档提出的一个开放问题——详见`Application.zh.md`里针对"Purchase Order Conversion"那条的API说明。
+每张`RequestQuotation`是不是都必须走完`PendingL1`和`PendingL2`两级，还是金额够小可以从`PendingL1`直接到`Approved`，这是对着Scope文档提出的一个开放问题——详见`Application.zh.md`"端到端业务流程"那一节，那张图上标出了同一个分支。
 
 ### `SupplierQuoteCopy.Status`（`Copystatus`）
 
@@ -389,7 +403,7 @@ stateDiagram-v2
 
 | 接口 | 定义 | 谁实现 |
 |---|---|---|
-| `IEntity` | `int Id { get; }` | 大部分实体。`ApprovalSetting`（主键是`Level`）和`Counter`（主键是`Name`）不实现它。 |
+| `IEntity` | `int Id { get; }` | 大部分实体，包括`EmailSettings`（它的`Id`固定是`1`，但依然是一个真正的`int Id`，跟下面那两个例外不一样）。`ApprovalSetting`（主键是`Level`）和`Counter`（主键是`Name`）不实现它。 |
 | `IExposableEntity` | 空接口，标记"会被映射成Dto对外返回" | 除`Counter`外的所有实体。 |
 | `IBaseEntity` | `IEntity` + `ICreationAuditable`的组合 | 需要记录创建时间的实体。 |
 | `IBaseExposableEntity` | `IBaseEntity` + `IExposableEntity`的组合 | 同上一组。 |
@@ -407,12 +421,12 @@ stateDiagram-v2
 | 编号 | 位置 | 问题 | 影响 |
 |---|---|---|---|
 | 1 | `PurchaseRequest.RequesterId` | 已解决——之前误写成`RequestedId`，现在已经跟配对的导航属性`Requester`对上了。 | — |
-| 2 | `SupplierQuoteDetail.purchaseRequest` | 类型是`PurchaseRequest`，但配对的外键是`PurchaseRequestItemId`；导航属性应该是`PurchaseRequestDetail`类型 | 类型和外键不匹配——配置EF Core关系时容易出问题 |
-| 3 | `RequestQuotation.PurchaseOrder` | 类型是`ICollection<PurchaseOrder>`，但`PurchaseOrder.RequestQuotationId`建立的是1对1关系（一个RQ最多转出一个PO） | 应该是`PurchaseOrder?` |
-| 4 | `Enums/CopyStatus.cs` | 类型声明为`Copystatus`（小写"s"），跟`PRStatus`/`RQStatus`/`POStatus`的PascalCase命名风格不一致 | 仅命名规范问题 |
-| 5 | `ApprovalSetting.level` | 属性名小写开头，是代码库里唯一一个没有遵循PascalCase的属性 | 仅命名规范问题 |
-| 6 | `User.Department`、`PurchaseRequest.Department` | 两处都是普通`string`；尽管`Department`在最初的Scope核对记录里是一个明确的业务概念，这个项目里目前没有对应的枚举 | 如果前端假设Department是固定取值集合，后端目前不会做这种校验 |
-| 7 | `Supplier.Id` | 声明为`required int Id` | 每次`new Supplier { ... }`都会被强制要求显式赋值`Id`，但这本应是数据库自增生成的值；跟`User.Id`/`PurchaseRequest.Id`（普通`int`）不一致 |
-| 8 | `PurchaseRequest.RequestQuotations` | 类型是`ICollection<RequestQuotation>`；Scope文档Full Flow描述的是一张PR转成**一张**RQ（单数），`CreateFromApprovedPRCommandHandler`的设计也是一次性转换 | 跟第3条是同一类问题——很可能应该是`RequestQuotation?`，还没确认 |
+| 2 | `SupplierQuoteDetail`导航属性 | 已解决——现在正确命名为`PurchaseRequestDetail`，类型也是`PurchaseRequestDetail`，跟配对的外键`PurchaseRequestItemId`对上了（以前叫`purchaseRequest`，类型是`PurchaseRequest`）。 | — |
+| 3 | `RequestQuotation.PurchaseOrder` | 已解决——现在是单个`PurchaseOrder?`，不是集合；`Infrastructure.zh.md`里已经应用的迁移还在`PurchaseOrder.RequestQuotationId`上加了`UNIQUE`索引，在数据库层面额外强制了这条1对1约束。 | — |
+| 4 | `Enums/CopyStatus.cs` | 已解决——现在正确是`CopyStatus`（PascalCase）；之前小写"s"的拼写已经改对。 | — |
+| 5 | `ApprovalSetting.Level` | 已解决——现在是正确的PascalCase。 | — |
+| 6 | `User.Department`、`PurchaseRequest.Department` | 还没解决。两处都是普通`string`；尽管`Department`在最初的Scope核对记录里是一个明确的业务概念，这个项目里目前没有对应的枚举。 | 如果前端假设Department是固定取值集合，后端目前不会做这种校验。 |
+| 7 | `Supplier.Id` | 已解决——现在是普通`int Id`，跟`User.Id`/`PurchaseRequest.Id`一致；每次`new Supplier { ... }`不再被强制要求显式赋值这个本应是数据库自增生成的字段。 | — |
+| 8 | `PurchaseRequest.RequestQuotations` | 已解决——现在是单个`RequestQuotation?`，不是集合；`Infrastructure.zh.md`里已经应用的迁移还在`RequestQuotation.PurchaseRequestId`上加了`UNIQUE`索引，在数据库层面额外强制了这条1对0或1约束。 | — |
 
-第2、3、8条涉及改字段类型，等对应的`Features/`模块实现之后可能有连带影响。第4-7条改动范围小、风险低。第1条已解决。
+第6条是现在唯一还没解决的，而且风险比其它几条更低（这是个建模选择，不是bug）——等客户确认部门的固定取值集合之后（Scope文档Assumptions那节），再决定`Department`要不要改成枚举。

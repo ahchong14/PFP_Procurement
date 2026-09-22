@@ -1,6 +1,6 @@
 # EF Core Configurations — Design Reference
 
-**One section per entity, covering every `IEntityTypeConfiguration<T>` under `Persistence/Configurations/`.** All 14 are implemented and the `InitialCreate` migration is applied against the real `PFP_Procurement` database (SQL Server LocalDB) — this document now describes finished, verified code, not a plan to implement against. Every column, index, and relationship below is cross-checked against the actual generated migration SQL, not just read off the `Configuration` source.
+**One section per entity, covering every `IEntityTypeConfiguration<T>` under `Persistence/Configurations/`.** All 15 are implemented and both migrations (`InitialCreate`, `AddEmailSettings`) are applied against the real `PFP_Procurement` database (SQL Server LocalDB) — this document now describes finished, verified code, not a plan to implement against. Every column, index, and relationship below is cross-checked against the actual generated migration SQL, not just read off the `Configuration` source.
 
 This document assumes the conventions already established in `Infrastructure.md` (Section 7) — enum-to-string conversion, filtered unique indexes for nullable-unique columns, `.IsRowVersion()` for optimistic concurrency, `DeleteBehavior.Restrict` for relationships into audit history, and always naming the inverse navigation explicitly in `.WithMany(x => x.Collection)`. Those rules are not repeated per entity below; only what is specific to each entity is called out.
 
@@ -23,6 +23,7 @@ This document assumes the conventions already established in `Infrastructure.md`
 13. [PurchaseOrderDetailConfiguration](#13-purchaseorderdetailconfiguration) — implemented
 14. [ApprovalSettingConfiguration](#14-approvalsettingconfiguration) — implemented
 15. [CounterConfiguration](#15-counterconfiguration) — implemented
+16. [EmailSettingsConfiguration](#16-emailsettingsconfiguration) — implemented
 
 ---
 
@@ -239,7 +240,7 @@ Same shadow-FK bug as `RequestQuotationConfiguration.cs` (Section 1), same fix: 
 | Indexes | None beyond the primary key |
 | Relationships | None. `ApproverRole` is a `Role` enum value, not a foreign key to any specific `User` row — the actual approver at runtime is resolved by matching a logged-in `User.Role` against this value, not by a database relationship. |
 
-This table's two rows are meant to be populated by `ApplicationDbContextSeed.cs`, which is still an unimplemented scaffold — see `Infrastructure.md` Known Issues, item 6. The table itself exists and is correctly shaped; it simply has no rows in it yet on a fresh database.
+This table's two rows are populated by `ApplicationDbContextSeed.cs` — implemented and verified against the real database. Seeded with `L1`/`DirectorL1`/0–10,000 and `L2`/`DirectorL2`/10,000+ as placeholder thresholds; the Scope Document's Assumptions section notes the client must supply the real amounts.
 
 ---
 
@@ -256,3 +257,21 @@ This table's two rows are meant to be populated by `ApplicationDbContextSeed.cs`
 | Relationships | None |
 
 No `RowVersion` and no optimistic concurrency here. The actual implementation (`Persistence/DocumentNumbers/SequentialDocumentNumberGenerator.cs`, documented in `Infrastructure.md` Section 1 and `Repositories.md`) ended up using a raw `UPDATE counters SET Seq = Seq + 1 OUTPUT INSERTED.Seq WHERE Name = @prefix` via `Database.SqlQuery<int>(...)`, rather than the `ExecuteUpdateAsync` originally anticipated here — both approaches are atomic under concurrent access without a concurrency token, but `SqlQuery` was chosen so the increment bypasses the change tracker entirely and can never prematurely flush unrelated pending changes on a `DbContext` shared with the calling Handler for the rest of its request.
+
+---
+
+## 16. EmailSettingsConfiguration
+
+**Status: implemented.** Added to close a real Scope Document gap — the client-configurable SMTP settings page — see `Infrastructure.md` Section 1 for the full feature and `Application.md` for the `Features/Settings/EmailSettings/` Command/Query pair that exposes it.
+
+| Aspect | Design |
+|---|---|
+| Table | `emailsettings` |
+| Primary key | `Id` — a single row, always `1`, assigned explicitly by `ApplicationDbContextSeed.cs`. `.Property(x => x.Id).ValueGeneratedNever()` is required here (see below). |
+| Notable columns | `Host` (255); `Port` — `int`; `Username` (255); `EncryptedPassword` (1000 — generous headroom over a raw password, since Data Protection payloads are base64-encoded and considerably longer than their plaintext input); `FromEmail` (255); `FromName` (150) |
+| Indexes | None beyond the primary key |
+| Relationships | None |
+
+**A real bug caught before the table was ever created**: EF Core's default convention treats an `int` primary key as an `IDENTITY` column with `ValueGeneratedOnAdd()`. Since the design requires `Id` to always be exactly `1` and set explicitly by the seed, that default would have silently discarded the seed's assigned value and let SQL Server generate its own — which happens to still land on `1` for the very first insert into a fresh table, but only by accident, not by guarantee, the moment the row is ever deleted and reinserted. Fixed with an explicit `.Property(x => x.Id).ValueGeneratedNever()` before `AddEmailSettings` was generated. See `Infrastructure.md` Section 7 for this as a general convention, not just a one-off fix.
+
+`EncryptedPassword` is never plaintext — `UpdateEmailSettingsCommandHandler` (in `PFP.Application`) calls `ISecretProtector.Protect(...)` before persisting, and `SmtpEmailService` (in `PFP.Infrastructure`) calls `ISecretProtector.Unprotect(...)` only at the point it actually needs to authenticate to the SMTP server. The `GetEmailSettingsQuery`/`EmailSettingsDto` pair never returns the password at all, encrypted or not — same pattern as any "change password" form that doesn't echo the current value back.

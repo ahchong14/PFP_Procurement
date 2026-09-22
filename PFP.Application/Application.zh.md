@@ -6,11 +6,11 @@
 |---|---|
 | 项目 | `PFP.Application` |
 | 依赖 | `PFP.Domain` |
-| 被谁依赖 | `PFP.Infrastructure`、`PFP.WebApi`（均未建立） |
-| 状态 | 基础设施部分已完成；`Users`模块已实现；其余8个模块仅有骨架 |
+| 被谁依赖 | `PFP.Infrastructure`（已实现）、`PFP.Host`（已存在，DI已接好，还没有Endpoint） |
+| 状态 | 基础设施部分已完成；`Users`和`Settings/EmailSettings`两个模块已实现；其余7个模块仅有骨架 |
 | 读者 | 后端维护者、后续接手的开发者 |
 
-本文档为英文版`Application.md`的中文对照版本，内容保持一致。枚举定义（`Role`、`PRStatus`等）记录在`PFP.Domain/Domain.zh.md`，本文档不重复。HTTP API契约（路由、请求/响应体、状态码）是`PFP.WebApi`层的事，不属于这一层——现在记录在`pfp_project/DATA-MODEL.md`，等`PFP.WebApi`项目建立之后会搬到它自己的文档里。
+本文档为英文版`Application.md`的中文对照版本，内容保持一致。枚举定义（`Role`、`PRStatus`等）记录在`PFP.Domain/Domain.zh.md`，本文档不重复。HTTP API契约（路由、请求/响应体、状态码）是`PFP.Host`层的事，不属于这一层——现在记录在`pfp_project/DATA-MODEL.md`，等`PFP.Host`的Endpoint建起来之后会搬到它自己的文档里。
 
 ---
 
@@ -34,16 +34,16 @@
 ## 1. 在整体架构中的位置
 
 ```
-PFP.WebApi (未建立)  ->  PFP.Application  ->  PFP.Domain
-                               ^
-                       PFP.Infrastructure (未建立，
-                       将来实现这里定义的接口)
+PFP.Host (已存在，还没有Endpoint)  ->  PFP.Application  ->  PFP.Domain
+                                            ^
+                                    PFP.Infrastructure (已实现，
+                                    实现了这里定义的接口)
 ```
 
 - **`PFP.Domain`** —— 只有实体、枚举、标记接口。零框架依赖，不知道`PFP.Application`的存在。
 - **`PFP.Application`**（本项目）—— 依赖`PFP.Domain`。把需要外部世界提供的能力（持久化、密码哈希、邮件）定义成接口，不实现它们。
-- **`PFP.Infrastructure`**（未建立）—— 依赖`PFP.Application`。提供具体实现（EF Core、SMTP、AutoCount API客户端）。
-- **`PFP.WebApi`**（未建立）—— 依赖以上两者。Endpoint只做请求转发：`sender.Send(new XxxCommand(...))`。
+- **`PFP.Infrastructure`** —— 依赖`PFP.Application`。提供具体实现（EF Core、通过`IEmailSettingsRepository`/`ISecretProtector`实现的SMTP、AutoCount API客户端——现在是`MockAutoCountService`）。完整细节见`PFP.Infrastructure/Doc_Ref/Infrastructure.zh.md`。
+- **`PFP.Host`** —— 依赖以上两者，两者都已经接进它的DI容器（`AddApplicationServices()`、`AddInfrastructureServices()`，另外启动时还会调`SeedInfrastructureAsync()`）。它现在还没有的是Endpoint或Controller——`Program.cs`里没有任何路由映射到`sender.Send(new XxxCommand(...))`，所以哪怕下面每一层都能编译、能跑、背后也是真实数据库，现在这个项目里没有一样东西能通过HTTP被调用。
 
 这种依赖反转让`PFP.Application`的业务逻辑可以独立测试——给`IUserRepository`一个假的实现，Handler该怎么跑还是怎么跑，不需要真的连数据库。
 
@@ -72,10 +72,13 @@ PFP.Application/
 │   │   ├── ISupplierQuoteRepository.cs
 │   │   ├── IRequestQuotationRepository.cs
 │   │   ├── IPurchaseOrderRepository.cs
+│   │   ├── IEmailSettingsRepository.cs
 │   │   └── IUnitOfWork.cs
 │   └── Services/
 │       ├── ICurrentUserService.cs
 │       ├── IPasswordHasher.cs
+│       ├── ITokenService.cs
+│       ├── ISecretProtector.cs
 │       ├── IDocumentNumberGenerator.cs
 │       └── IEmailService.cs
 │
@@ -130,6 +133,11 @@ PFP.Application/
     │   ├── ApprovalSettingDto.cs
     │   ├── Commands/UpdateApprovalSettings/
     │   └── Queries/GetApprovalSettings/
+    ├── Settings/
+    │   └── EmailSettings/
+    │       ├── EmailSettingsDto.cs
+    │       ├── Commands/UpdateEmailSettings/
+    │       └── Queries/GetEmailSettings/
     ├── PurchaseRequests/
     │   ├── PurchaseRequestDto.cs
     │   ├── Commands/{CreatePurchaseRequest, ApprovePurchaseRequest, RejectPurchaseRequest}/
@@ -157,8 +165,8 @@ PFP.Application/
 | 子文件夹 | 职责 |
 |---|---|
 | `Messaging/` | 请求分发契约：一个请求怎么从调用方流转到处理它的Handler。 |
-| `Persistence/` | 数据访问契约。每个聚合根一个Repository，不是每个实体一个——子实体（`PurchaseRequestItem`、`RQApproval`等）永远通过它所属聚合根的Repository查询和修改。 |
-| `Services/` | 跟持久化无关的外部能力：当前登录者上下文、密码哈希、单据编号生成、邮件发送。 |
+| `Persistence/` | 数据访问契约。每个聚合根一个Repository，不是每个实体一个——子实体（`PurchaseRequestItem`、`RQApproval`等）永远通过它所属聚合根的Repository查询和修改。`IEmailSettingsRepository`是唯一的例外：`EmailSettings`不是Scope文档采购主流程里的业务聚合根，它是一张系统配置单例表（跟`ApprovalSetting`一个道理），有Repository的原因也跟`ApprovalSetting`一样——见`PFP.Infrastructure/Doc_Ref/Repositories.zh.md`。 |
+| `Services/` | 跟持久化无关的外部能力：当前登录者上下文、密码哈希、签发JWT（`ITokenService`）、密钥加密（`ISecretProtector`）、单据编号生成、邮件发送。 |
 
 ### `Internal/Messaging/` —— `Abstractions/Messaging`契约的具体实现
 
@@ -254,6 +262,7 @@ sequenceDiagram
 | **Suppliers** | `CreateSupplier`、`InviteSupplier`、`CompleteSupplierRegistration`、`SyncSuppliersFromAutoCount` | `GetSuppliers`、`GetSupplierById`、`GetSupplierQuoteHistory` |
 | **Items** | `SyncItemsFromAutoCount` | `GetItems`、`GetItemById` |
 | **ApprovalSettings** | `UpdateApprovalSettings` | `GetApprovalSettings` |
+| **Settings/EmailSettings** | `UpdateEmailSettings` | `GetEmailSettings` |
 | **PurchaseRequests** | `CreatePurchaseRequest`、`ApprovePurchaseRequest`、`RejectPurchaseRequest` | `GetPurchaseRequests`、`GetPurchaseRequestById` |
 | **SupplierQuotes** | `SubmitSupplierQuote` | `GetSupplierQuoteByToken` |
 | **RequestQuotations** | `CreateFromApprovedPR`（内部专用）、`ApproveRequestQuotation`、`RejectRequestQuotation`、`ConvertToPurchaseOrder` | `GetRequestQuotations`、`GetRequestQuotationById` |
@@ -302,7 +311,7 @@ flowchart TD
 4. **如果Command带请求体就写Validator**——`ArchivePurchaseRequestCommandValidator : AbstractValidator<ArchivePurchaseRequestCommand>`；纯粹按id操作、没有请求体可以省略。
 5. **写Handler**——注入需要的Repository/Service，查出实体，执行业务规则校验（不满足就`throw`对应的`Common/Exceptions`类型），修改状态，调`SaveChangesAsync`，返回Dto。
 6. **不需要手动注册**——`DependencyInjection.cs`的反射扫描会自动发现新的`IRequestHandler<,>`实现，`AddValidatorsFromAssembly`也会自动发现新的Validator。
-7. **等`PFP.WebApi`建立之后**，在对应的`Endpoints/XxxEndpoints.cs`里加一行`sender.Send(new ArchivePurchaseRequestCommand(...))`。
+7. **等`PFP.Host`有了Endpoint层之后**，在对应的`Endpoints/XxxEndpoints.cs`里加一行`sender.Send(new ArchivePurchaseRequestCommand(...))`。
 
 ---
 
@@ -310,16 +319,17 @@ flowchart TD
 
 | 部分 | 状态 |
 |---|---|
-| `Abstractions/`（Messaging + Persistence + Services） | 已完整定义 |
+| `Abstractions/`（Messaging + Persistence + Services） | 已完整定义，包括跟SMTP设置页面一起加进来的`IEmailSettingsRepository`/`ISecretProtector`/`ITokenService` |
 | `Internal/Messaging/`（Sender + Wrapper） | 已实现，编译通过 |
 | `Common/`（Authorization + Behaviours + Exceptions + Results） | 已实现 |
-| `Integrations/AutoCount/` | 接口和四个DTO已定义 |
+| `Integrations/AutoCount/` | 接口和四个DTO已定义；`PFP.Infrastructure`现在用`MockAutoCountService`支撑它，不是真实的HTTP客户端 |
 | `Features/Users/` | 已实现（`CreateUser`、`UpdateUserRole`、`ActivateUser`、`DeactivateUser`、`GetUserById`、`GetUsers`） |
-| `Features/`其余8个模块 | 只有Command/Query骨架，Handler逻辑尚未编写 |
-| `PFP.Infrastructure` | 项目已建立；`DbContext`和14个`Configuration`文件里的2个已实现——具体进度见`PFP.Infrastructure/Infrastructure.zh.md` |
-| `PFP.WebApi`（Endpoints、`Program.cs`接线） | 尚未建立 |
+| `Features/Settings/EmailSettings/` | 已实现（`UpdateEmailSettings`、`GetEmailSettings`）——补上了Scope文档要求的、客户能自己配置的SMTP设置页面这个缺口；见`PFP.Infrastructure/Doc_Ref/Infrastructure.zh.md`第1节 |
+| `Features/`其余7个模块 | 只有Command/Query骨架，Handler逻辑尚未编写 |
+| `PFP.Infrastructure` | 已完整实现——9个Repository、15个`Configuration`文件全部就绪，`DependencyInjection.cs`已接好，种子数据已经对照真实的SQL Server LocalDB数据库核对过。完整细节见`PFP.Infrastructure/Doc_Ref/Infrastructure.zh.md`。 |
+| `PFP.Host`（Endpoints、`Program.cs`接线） | 项目已存在、也能跑起来——`AddApplicationServices()`、`AddInfrastructureServices()`、`SeedInfrastructureAsync()`都在启动时被调用，实际运行过、对照真实数据库确认过。但还没有任何Endpoint或Controller——没有一条路由映射到`ISender`。 |
 
-`PFP.WebApi`还不存在，目前没有任何HTTP层——不管`pfp_project/DATA-MODEL.md`那份API路由表里写的是什么，这个项目现在没有任何东西能通过HTTP被调用。唯一从Repository接口到Handler完整跑通的功能是`Users`。
+不是因为`PFP.Host`不存在才没有HTTP层——它是存在的，也真的能跑起来——而是因为它还没有任何Endpoint或Controller接到`ISender`上。所以不管`pfp_project/DATA-MODEL.md`那份API路由表里写的是什么，这个项目现在没有任何东西能通过HTTP被调用。目前从Repository接口到Handler完整跑通的功能是`Users`和`Settings/EmailSettings`。
 
 ---
 
@@ -332,6 +342,14 @@ flowchart TD
 | 1 | `CreateUserCommand.Department` | 可选——只有`Requester`角色需要 | `string`类型，所有角色都必填 | 待定——需要决定是把字段改回可选，还是正式采纳目前的必填行为 |
 
 随着后续模块从骨架进入实现、并逐一对照核实，这张表会持续增加条目。
+
+**对照真实源码核对`Features/`时发现并修复的脚手架bug**（不是设计偏差——纯粹是生成脚手架时的复制粘贴错误，跟`DATA-MODEL.md`没关系）：
+
+- `ApprovalSettingDto.cs`的命名空间原来写成`PFP.Application.Features.Items`，应该是`...Features.ApprovalSettings`。
+- `CreatePurchaseRequestCommand.cs`、`CreatePurchaseRequestCommandHandler.cs`、`CreatePurchaseRequestCommandValidator.cs`三个文件的命名空间原来都写成`...Commands.ApprovePurchaseRequest`，应该是`...Commands.CreatePurchaseRequest`。
+- `CreateSupplierCommand.cs`的命名空间原来写成`...Features.Users.Commands.ActivateUser`，应该是`...Features.Suppliers.Commands.CreateSupplier`。
+
+这几个都没有导致编译失败（C#不要求命名空间跟文件夹路径对应），但只要有人开始在这些文件里写真代码、或者任何地方按命名空间约定去找类型，就会踩坑。三个都已经修复；是把`Features/`下每个文件声明的命名空间跟它的文件夹路径逐一比对扫出来的。
 
 ---
 

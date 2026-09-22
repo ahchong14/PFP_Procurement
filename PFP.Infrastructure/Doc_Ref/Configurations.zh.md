@@ -1,6 +1,6 @@
 # EF Core Configuration 设计参考
 
-**每个实体一节，覆盖`Persistence/Configurations/`下每一个`IEntityTypeConfiguration<T>`。** 14个全部已实现，`InitialCreate`迁移也已经应用到真实的`PFP_Procurement`数据库（SQL Server LocalDB）上——这份文档现在描述的是已完成、经过核对的代码，不再是一份等着去实现的计划。下面每一列、每一个索引、每一条关系都对照过真实生成的迁移SQL，不是只凭`Configuration`源码读出来的。
+**每个实体一节，覆盖`Persistence/Configurations/`下每一个`IEntityTypeConfiguration<T>`。** 15个全部已实现，两个迁移（`InitialCreate`、`AddEmailSettings`）也已经应用到真实的`PFP_Procurement`数据库（SQL Server LocalDB）上——这份文档现在描述的是已完成、经过核对的代码，不再是一份等着去实现的计划。下面每一列、每一个索引、每一条关系都对照过真实生成的迁移SQL，不是只凭`Configuration`源码读出来的。
 
 本文档假设你已经了解`Infrastructure.zh.md`第7节记录的通用规范——枚举转字符串、可空唯一字段加过滤条件、`.IsRowVersion()`做乐观并发、`DeleteBehavior.Restrict`保护审计历史记录、以及在`.WithMany(x => x.Collection)`里永远显式写出反向导航属性。这些规则不会在每个实体下面重复一遍，下面只讲每个实体特有的东西。
 
@@ -23,6 +23,7 @@
 13. [PurchaseOrderDetailConfiguration](#13-purchaseorderdetailconfiguration)——已实现
 14. [ApprovalSettingConfiguration](#14-approvalsettingconfiguration)——已实现
 15. [CounterConfiguration](#15-counterconfiguration)——已实现
+16. [EmailSettingsConfiguration](#16-emailsettingsconfiguration)——已实现
 
 ---
 
@@ -239,7 +240,7 @@
 | 索引 | 除主键外无其它索引 |
 | 关系 | 无。`ApproverRole`是一个`Role`枚举值，不是指向某个具体`User`记录的外键——运行时真正的审批人是拿当前登录`User.Role`去跟这个值比对出来的，不是靠数据库关系查出来的。 |
 
-这张表的两条记录本该是`ApplicationDbContextSeed.cs`铺进去的，但这个文件现在还是个没实现的空壳——见`Infrastructure.zh.md`"已知问题"第6条。表本身已经建好、结构也对，只是新建出来的数据库里现在一条记录都没有。
+这张表的两条记录由`ApplicationDbContextSeed.cs`铺进去——已实现，对照真实数据库核对过。种下去的是`L1`/`DirectorL1`/0–10000、`L2`/`DirectorL2`/10000以上这组占位阈值；Scope文档的Assumptions那节说了真实金额要客户提供。
 
 ---
 
@@ -256,3 +257,21 @@
 | 关系 | 无 |
 
 这里没有`RowVersion`、也不需要乐观并发。真正的实现（`Persistence/DocumentNumbers/SequentialDocumentNumberGenerator.cs`，记录在`Infrastructure.zh.md`第1节和`Repositories.zh.md`）最后用的是一条原始SQL`UPDATE counters SET Seq = Seq + 1 OUTPUT INSERTED.Seq WHERE Name = @prefix`，通过`Database.SqlQuery<int>(...)`执行，而不是这里最初设想的`ExecuteUpdateAsync`——两种写法在并发访问下都是原子安全的，不需要额外的并发令牌，但选`SqlQuery`是因为这个自增操作完全绕开了change tracker，不会有风险去提前冲掉同一个`DbContext`上、调用它的Handler在这次请求里还没提交的其它改动。
+
+---
+
+## 16. EmailSettingsConfiguration
+
+**状态：已实现。** 为了补上Scope文档里一个真实的缺口——客户能自己配置的SMTP设置页面——才加的这张表；完整功能见`Infrastructure.zh.md`第1节，暴露这张表的`Features/Settings/EmailSettings/`那对Command/Query见`Application.zh.md`。
+
+| 项目 | 设计 |
+|---|---|
+| 表名 | `emailsettings` |
+| 主键 | `Id`——单行，永远是`1`，由`ApplicationDbContextSeed.cs`显式赋值。这里必须加`.Property(x => x.Id).ValueGeneratedNever()`（原因见下）。 |
+| 关键字段 | `Host`(255)；`Port`——`int`；`Username`(255)；`EncryptedPassword`(1000——比原始密码需要的长度宽裕不少，因为Data Protection的输出是base64编码，比明文输入长得多)；`FromEmail`(255)；`FromName`(150) |
+| 索引 | 除主键外无其它索引 |
+| 关系 | 无 |
+
+**在这张表真正建出来之前就抓到的一个真实bug**：EF Core对`int`主键的默认约定会把它当成`IDENTITY`列，带`ValueGeneratedOnAdd()`。设计上要求`Id`永远固定是`1`、由种子代码显式赋值，默认约定会悄悄丢掉种子赋的这个值，改成让SQL Server自己生成——对一张全新的表来说，第一次插入"碰巧"还是会落在`1`上，但这只是运气好，不是保证，一旦这行数据被删了再重建就靠不住了。在生成`AddEmailSettings`之前，显式加了`.Property(x => x.Id).ValueGeneratedNever()`修好。这条也记在`Infrastructure.zh.md`第7节的规范表里，不只是这一次的孤立修复。
+
+`EncryptedPassword`从来不是明文——`PFP.Application`里的`UpdateEmailSettingsCommandHandler`在存盘之前会调`ISecretProtector.Protect(...)`，`PFP.Infrastructure`里的`SmtpEmailService`只在真正要向SMTP服务器认证的那一刻才调`ISecretProtector.Unprotect(...)`。`GetEmailSettingsQuery`/`EmailSettingsDto`这一对压根不会返回密码，不管加不加密都不返回——跟任何"修改密码"表单不回显当前密码是同一个道理。

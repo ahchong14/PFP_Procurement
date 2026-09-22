@@ -7,7 +7,7 @@
 | Project | `PFP.Infrastructure` |
 | Depends on | `PFP.Application` (and, transitively, `PFP.Domain`) |
 | Depended on by | `PFP.Host` |
-| Status | Wired end-to-end: DI is registered from `PFP.Host/Program.cs`, all 14 `IEntityTypeConfiguration<T>` and all 8 repositories + `UnitOfWork` are implemented, and the `InitialCreate` migration is applied against a real SQL Server LocalDB database (`PFP_Procurement`). Remaining gaps: `AutoCountService` (real HTTP client), `ApplicationDbContextSeed`, `ApplicationDbContextFactory`, and `Properties/PublishProfiles.cs` are still scaffolds — see Section 8. |
+| Status | Wired end-to-end: DI is registered and seeding runs from `PFP.Host/Program.cs`, all 15 `IEntityTypeConfiguration<T>` and all 9 repositories + `UnitOfWork` are implemented, and both migrations (`InitialCreate`, `AddEmailSettings`) are applied against a real SQL Server LocalDB database (`PFP_Procurement`), seed data verified with `sqlcmd`. Remaining gaps: `AutoCountService` (real HTTP client), `ApplicationDbContextFactory`, and `Properties/PublishProfiles.cs` are still scaffolds — see Section 8. |
 | Audience | Anyone picking up this project for the first time |
 
 Application-layer architecture is documented in `PFP.Application/Application.md`; Domain entities and enums in `PFP.Domain/Domain.md`; the detailed design for every `IEntityTypeConfiguration<T>` in this project's own `Configurations.md`; the detailed design for every repository in `Repositories.md`. This document is the entry point — start here, then follow the cross-references.
@@ -37,10 +37,11 @@ Everything below is a capability `PFP.Application` declared as an interface, tha
 |---|---|---|---|
 | Read/write each of the 9 aggregate roots | `IUserRepository`, `ISupplierRepository`, `IItemRepository`, `IApprovalSettingRepository`, `IPurchaseRequestRepository`, `ISupplierQuoteRepository`, `IRequestQuotationRepository`, `IPurchaseOrderRepository` | `Persistence/Repositories/` | Each wraps `ApplicationDbContext`; the repositories for entities with child collections (`PurchaseRequest`, `RequestQuotation`, `PurchaseOrder`) eager-load them with `.Include()`. See `Repositories.md` for the full per-repository design. |
 | Commit a unit of work across one or more repositories atomically | `IUnitOfWork` | `Persistence/UnitOfWork.cs` | A single `SaveChangesAsync()` forwarded to the underlying `DbContext`. |
-| The database schema itself | — | `Persistence/Database/ApplicationDbContext.cs`, `Persistence/Configurations/` | 14 `DbSet<T>`, one `IEntityTypeConfiguration<T>` per entity, all implemented. See `Configurations.md` for the full per-entity design. |
-| Seed data required for the system to function | — | `Persistence/Database/Seed/ApplicationDbContextSeed.cs` | **Not yet implemented** — still a scaffold. Needs to populate the two mandatory `ApprovalSetting` rows (`L1`, `L2`); see Known Issues, item 6. |
+| The database schema itself | — | `Persistence/Database/ApplicationDbContext.cs`, `Persistence/Configurations/` | 15 `DbSet<T>`, one `IEntityTypeConfiguration<T>` per entity, all implemented. See `Configurations.md` for the full per-entity design. |
+| Seed data required for the system to function | — | `Persistence/Database/Seed/ApplicationDbContextSeed.cs` | Implemented and verified against a real run — populates the two mandatory `ApprovalSetting` rows (`L1`/`DirectorL1`/0–10,000; `L2`/`DirectorL2`/10,000+ — placeholder thresholds, see the code comment), the three `Counter` rows (`PR`/`RQ`/`PO`, `Seq = 0`), and the single `EmailSettings` row (`Id = 1`, empty placeholder values). Called once at startup via `DependencyInjection.SeedInfrastructureAsync()`, invoked from `PFP.Host/Program.cs`. Idempotent — checks `AnyAsync()` per table before inserting. |
 | Pull/push integration with AutoCount | `IAutoCountService` | `Integrations/AutoCount/` | `MockAutoCountService` (registered today) returns canned/empty data so every flow that depends on `IAutoCountService` runs locally without a live AutoCount connection. `AutoCountService` (placeholder) will hold the real HTTP client once AutoCount's actual API (endpoints, auth, payload shapes) is documented. |
-| Sending email | `IEmailService` | `Email/SmtpEmailService.cs` | Implemented — SMTP delivery via `System.Net.Mail.SmtpClient`, configured through `EmailOptions`. Server credentials are supplied via `appsettings.json`/environment, not hardcoded. |
+| Sending email | `IEmailService` | `Email/SmtpEmailService.cs` | Implemented — SMTP delivery via `System.Net.Mail.SmtpClient`. Settings (`Host`/`Port`/`Username`/`Password`/`FromEmail`/`FromName`) are read fresh from the database on every send via `IEmailSettingsRepository`, not static configuration — this is the settings page the Scope Document's Out-of-Scope clause requires ("only the settings page ... is provided"). The stored password is never plaintext — see `ISecretProtector` below. |
+| Reading/updating the SMTP settings the client configures themselves | `IEmailSettingsRepository`, `ISecretProtector` | `Persistence/Repositories/EmailSettingsRepository.cs`, `Security/DataProtectionSecretProtector.cs` | Single-row `EmailSettings` table (`Id` fixed at `1`). `ISecretProtector` wraps ASP.NET Core's Data Protection API to encrypt the password at rest and decrypt it only when `SmtpEmailService` needs to actually authenticate. Exposed to the rest of the system through `Features/Settings/EmailSettings/` (`GetEmailSettingsQuery`/`UpdateEmailSettingsCommand`, both `[RequireRole(Role.HeadOfPurchase)]`) in `PFP.Application`. |
 | Knowing who the current caller is | `ICurrentUserService` | `Identity/CurrentUserService.cs` | Implemented — reads `UserId` / `SupplierId` / `Role` / `IsAuthenticated` from JWT claims on the current `HttpContext`, via `IHttpContextAccessor`. |
 | Hashing passwords | `IPasswordHasher` | `Identity/PasswordHasher.cs` | Implemented — wraps `Microsoft.AspNetCore.Identity.PasswordHasher<T>` (PBKDF2), from the lightweight `Microsoft.Extensions.Identity.Core` package. Uses a throwaway `object` as the generic type argument since the default algorithm never actually inspects the "user" parameter. |
 | Issuing JWTs | `ITokenService` | `Identity/JwtTokenService.cs` | Implemented — builds a signed JWT (`HmacSha256`) carrying `UserId`/`SupplierId`/`Email`/`Role` claims, configured through `JwtOptions`. |
@@ -60,7 +61,7 @@ PFP.Host  ->  PFP.Infrastructure  ->  PFP.Application  ->  PFP.Domain
 
 ## 3. Entity Relationship Diagram
 
-Generated directly from the applied `InitialCreate` migration (`Persistence/Migrations/`) against the real `PFP_Procurement` database — not from reading the entity classes by hand, so this reflects exactly what SQL Server actually enforces today, including delete behavior, uniqueness, and the two 1:0-or-1 relationships now confirmed by real unique indexes rather than assumed. `ApprovalSetting` (`approvalsettings`, keyed on `Level`) and `Counter` (`counters`, keyed on `Name`) have no foreign-key relationships to anything and are omitted from the diagram; see `Configurations.md` for their column detail.
+Generated directly from the applied migrations (`Persistence/Migrations/` — `InitialCreate` plus `AddEmailSettings`) against the real `PFP_Procurement` database — not from reading the entity classes by hand, so this reflects exactly what SQL Server actually enforces today, including delete behavior, uniqueness, and the two 1:0-or-1 relationships now confirmed by real unique indexes rather than assumed. `ApprovalSetting` (`approvalsettings`, keyed on `Level`), `Counter` (`counters`, keyed on `Name`), and `EmailSettings` (`emailsettings`, single row keyed on a fixed `Id = 1`) have no foreign-key relationships to anything and are omitted from the diagram; see `Configurations.md` for their column detail.
 
 ```mermaid
 erDiagram
@@ -219,6 +220,7 @@ PFP.Infrastructure/
 │   │   │   └── PurchaseOrderDetailConfiguration.cs
 │   │   ├── ApprovalSettingConfiguration.cs
 │   │   ├── CounterConfiguration.cs
+│   │   ├── EmailSettingsConfiguration.cs
 │   │   └── DatabaseValueConverter.cs
 │   ├── Repositories/
 │   │   ├── UserRepository.cs
@@ -228,12 +230,13 @@ PFP.Infrastructure/
 │   │   ├── PurchaseRequestRepository.cs
 │   │   ├── SupplierQuoteRepository.cs
 │   │   ├── RequestQuotationRepository.cs
-│   │   └── PurchaseOrderRepository.cs
+│   │   ├── PurchaseOrderRepository.cs
+│   │   └── EmailSettingsRepository.cs
 │   ├── DocumentNumbers/
 │   │   └── SequentialDocumentNumberGenerator.cs
 │   ├── Migrations/
-│   │   ├── <timestamp>_InitialCreate.cs
-│   │   ├── <timestamp>_InitialCreate.Designer.cs
+│   │   ├── <timestamp>_InitialCreate.cs / .Designer.cs
+│   │   ├── <timestamp>_AddEmailSettings.cs / .Designer.cs
 │   │   └── ApplicationDbContextModelSnapshot.cs
 │   └── UnitOfWork.cs
 │
@@ -250,9 +253,11 @@ PFP.Infrastructure/
 │   ├── PasswordHasher.cs
 │   └── JwtTokenService.cs
 │
+├── Security/
+│   └── DataProtectionSecretProtector.cs
+│
 ├── Options/
 │   ├── AutoCountApiOptions.cs
-│   ├── EmailOptions.cs
 │   └── JwtOptions.cs
 │
 └── Properties/
@@ -267,19 +272,19 @@ PFP.Infrastructure/
 
 - **`ApplicationDbContext.cs`** — the EF Core session. Exposes one `DbSet<T>` per entity and wires up `Configurations/` via `ApplyConfigurationsFromAssembly` in `OnModelCreating`.
 - **`ApplicationDbContextFactory.cs`** — still a scaffold. Would implement `IDesignTimeDbContextFactory<ApplicationDbContext>`, needed only if `dotnet ef` is invoked directly from this project without `--startup-project ../PFP.Host`. In practice the `--startup-project` approach (see Section 6) has been used successfully to generate and apply `InitialCreate` without this file, so it remains optional — kept as a documented gap, not a blocker.
-- **`Database/Seed/ApplicationDbContextSeed.cs`** — still a scaffold. See Known Issues, item 6, for why this is a real (not just cosmetic) gap now that the database actually exists.
+- **`Database/Seed/ApplicationDbContextSeed.cs`** — implemented and verified by actually running `PFP.Host` against the real database and checking the rows with `sqlcmd`. Seeds `ApprovalSetting` (`L1`/`L2`), `Counter` (`PR`/`RQ`/`PO`), and `EmailSettings` (the single `Id = 1` row).
 
 ### `Persistence/Configurations/`
 
-One `IEntityTypeConfiguration<T>` per entity, mirroring the grouping used in `PFP.Domain/Entities/` — all 14 implemented. Full design detail for every one of them is in this project's `Configurations.md`, not repeated here.
+One `IEntityTypeConfiguration<T>` per entity, mirroring the grouping used in `PFP.Domain/Entities/` — all 15 implemented. Full design detail for every one of them is in this project's `Configurations.md`, not repeated here.
 
 ### `Persistence/Repositories/`, `Persistence/UnitOfWork.cs`, `Persistence/DocumentNumbers/`
 
-Implementations of the eight repository interfaces, `IUnitOfWork`, and `IDocumentNumberGenerator` declared in `PFP.Application/Abstractions/`. All implemented. See `Repositories.md` for per-repository design, and Section 1 above for `SequentialDocumentNumberGenerator`'s atomic-increment approach.
+Implementations of the nine repository interfaces (eight for the aggregate roots, plus `IEmailSettingsRepository`), `IUnitOfWork`, and `IDocumentNumberGenerator` declared in `PFP.Application/Abstractions/`. All implemented. See `Repositories.md` for per-repository design, and Section 1 above for `SequentialDocumentNumberGenerator`'s atomic-increment approach.
 
 ### `Persistence/Migrations/`
 
-Generated by `dotnet ef migrations add`, not hand-written. Currently one migration, `InitialCreate`, applied against `PFP_Procurement` on local SQL Server LocalDB.
+Generated by `dotnet ef migrations add`, not hand-written. Currently two migrations, `InitialCreate` then `AddEmailSettings`, applied against `PFP_Procurement` on local SQL Server LocalDB.
 
 ### `Integrations/AutoCount/`
 
@@ -287,7 +292,7 @@ Mirrors `PFP.Application/Integrations/AutoCount/` on the Application side. `Mock
 
 ### `Email/SmtpEmailService.cs`
 
-Implements `IEmailService` over `System.Net.Mail.SmtpClient`, configured through `EmailOptions` (`Host`, `Port`, `Username`, `Password`, `FromEmail`, `FromName`).
+Implements `IEmailService` over `System.Net.Mail.SmtpClient`, reading `EmailSettings` (`Host`, `Port`, `Username`, `EncryptedPassword`, `FromEmail`, `FromName`) fresh from the database via `IEmailSettingsRepository` on every call — not cached configuration. The password is decrypted through `ISecretProtector` only at the point of use.
 
 ### `Identity/`
 
@@ -295,9 +300,13 @@ Implements `IEmailService` over `System.Net.Mail.SmtpClient`, configured through
 - **`PasswordHasher.cs`** — implements `IPasswordHasher` over `Microsoft.AspNetCore.Identity.PasswordHasher<T>`.
 - **`JwtTokenService.cs`** — implements `ITokenService`, issuing the JWTs that `CurrentUserService` later reads claims from.
 
+### `Security/DataProtectionSecretProtector.cs`
+
+Implements `ISecretProtector` over ASP.NET Core's Data Protection API (`IDataProtectionProvider.CreateProtector(...)`). Currently the only consumer is `SmtpEmailService`, protecting `EmailSettings.EncryptedPassword` — but the abstraction is generic (`Protect`/`Unprotect` on any string), not email-specific, so any future secret that needs to be stored and later read back in plaintext can reuse it. See Section 1's note on Data Protection's key-ring persistence for the one deployment caveat.
+
 ### `Options/`
 
-Strongly-typed configuration classes bound from `appsettings.json` via the Options pattern (`IOptions<T>`), not raw `IConfiguration` lookups scattered through the code: `AutoCountApiOptions`, `EmailOptions`, `JwtOptions`. The database connection string is the one exception — it's read directly via `IConfiguration.GetConnectionString("DefaultConnection")` in `DependencyInjection.AddDatabase`, since it is consumed in exactly one place and an `Options` wrapper would add a layer of indirection with no reuse benefit.
+Strongly-typed configuration classes bound from `appsettings.json` via the Options pattern (`IOptions<T>`), not raw `IConfiguration` lookups scattered through the code: `AutoCountApiOptions`, `JwtOptions`. The database connection string is the one exception — it's read directly via `IConfiguration.GetConnectionString("DefaultConnection")` in `DependencyInjection.AddDatabase`, since it is consumed in exactly one place and an `Options` wrapper would add a layer of indirection with no reuse benefit. `EmailOptions` used to live here too; it was removed once SMTP settings moved to the database — see `EmailSettings` (Section 1) and the settings-page rationale there.
 
 ---
 
@@ -319,7 +328,7 @@ The project targets **Microsoft SQL Server**, not MySQL — this was a deliberat
 | Generating a migration | `dotnet ef migrations add <Name> --project PFP.Infrastructure --startup-project PFP.Host --output-dir Persistence/Migrations` |
 | Applying a migration | `dotnet ef database update --project PFP.Infrastructure --startup-project PFP.Host` |
 
-**Current status**: `InitialCreate` has been generated and applied. `PFP_Procurement` exists on the local LocalDB instance with all 14 tables, foreign keys, and indexes from Section 3's ERD. The database does not need to be recreated manually going forward — `dotnet ef database update` is idempotent and only applies migrations not yet recorded in `__EFMigrationsHistory`.
+**Current status**: two migrations generated and applied — `InitialCreate`, then `AddEmailSettings`. `PFP_Procurement` exists on the local LocalDB instance with all 15 tables, foreign keys, and indexes from Section 3's ERD, and the seed data (Section 5) has been verified against it with `sqlcmd`. The database does not need to be recreated manually going forward — `dotnet ef database update` is idempotent and only applies migrations not yet recorded in `__EFMigrationsHistory`.
 
 ---
 
@@ -334,6 +343,7 @@ The project targets **Microsoft SQL Server**, not MySQL — this was a deliberat
 | Two relationships between the same pair of tables (e.g. `PurchaseRequest` <-> `SupplierQuoteCopy`) | Exactly one direction may cascade | SQL Server rejects a second cascade path between the same two tables. |
 | A many-to-one relationship where the "one" side has a real collection navigation (e.g. `Supplier.PurchaseOrders`) | Pass it explicitly: `.WithMany(x => x.PurchaseOrders)`, never an unnamed `.WithMany()` | An unnamed `.WithMany()` when a real collection exists does not bind to it. EF Core instead auto-discovers a *second*, unconfigured relationship for that collection and creates a phantom shadow FK column (e.g. `SupplierId1`) alongside the real one. Found and fixed in `PurchaseOrderConfiguration.cs` and `RequestQuotationConfiguration.cs` while generating `InitialCreate` — EF's model-validation warnings named it directly. |
 | A repository's `GetByIdAsync` on an aggregate root with child collections | `.Include(...)` the child collections | The Handler expects the full aggregate; a partial load would silently produce empty collections. |
+| A single-row config table with a fixed, code-assigned primary key (e.g. `EmailSettings.Id`, always `1`) | `.Property(x => x.Id).ValueGeneratedNever()` | Without this, EF Core's default convention treats an `int` PK as an `IDENTITY` column and silently discards any value the seed code explicitly assigns, letting the database generate its own instead. It happens to still land on `1` for the very first insert into a fresh table — but that's accidental, not guaranteed, the moment the row is ever deleted and reinserted. Caught while seeding `EmailSettings`, before the table was ever created. |
 
 Full per-entity detail (table names, column lengths, exact indexes) is in `Configurations.md`.
 
@@ -343,49 +353,52 @@ Full per-entity detail (table names, column lengths, exact indexes) is in `Confi
 
 | Component | Status |
 |---|---|
-| `PFP.Infrastructure.csproj` | Configured: `net11.0`, `FrameworkReference` to `Microsoft.AspNetCore.App` (for `IHttpContextAccessor`/`HttpContext`, and transitively provides `Microsoft.Extensions.Identity.Core`'s `PasswordHasher<T>`), EF Core 9.0.9 (Core, Design, SqlServer), `System.IdentityModel.Tokens.Jwt` 8.5.0, `ProjectReference` to `PFP.Application` |
-| `Persistence/Database/ApplicationDbContext.cs` | Implemented — all 14 `DbSet<T>` exposed, `ApplyConfigurationsFromAssembly` wired |
+| `PFP.Infrastructure.csproj` | Configured: `net11.0`, `FrameworkReference` to `Microsoft.AspNetCore.App` (for `IHttpContextAccessor`/`HttpContext`, Data Protection, and transitively `Microsoft.Extensions.Identity.Core`'s `PasswordHasher<T>`), EF Core 9.0.9 (Core, Design, SqlServer), `System.IdentityModel.Tokens.Jwt` 8.5.0, `ProjectReference` to `PFP.Application` |
+| `Persistence/Database/ApplicationDbContext.cs` | Implemented — all 15 `DbSet<T>` exposed, `ApplyConfigurationsFromAssembly` wired |
 | `Persistence/Database/ApplicationDbContextFactory.cs` | Scaffold only — unused; the `--startup-project` approach doesn't need it (see Section 6) |
-| `Persistence/Database/Seed/ApplicationDbContextSeed.cs` | Scaffold only — see Known Issues, item 6 |
-| All 14 `Configuration` files | Implemented |
-| `Persistence/Repositories/` (8 files) + `UnitOfWork.cs` | Implemented — see `Repositories.md` |
+| `Persistence/Database/Seed/ApplicationDbContextSeed.cs` | Implemented — verified by running `PFP.Host` against the real database and checking the rows with `sqlcmd` |
+| All 15 `Configuration` files | Implemented |
+| `Persistence/Repositories/` (9 files) + `UnitOfWork.cs` | Implemented — see `Repositories.md` |
 | `Persistence/DocumentNumbers/SequentialDocumentNumberGenerator.cs` | Implemented |
-| `Persistence/Migrations/` | `InitialCreate` generated and applied against `PFP_Procurement` |
+| `Persistence/Migrations/` | `InitialCreate` and `AddEmailSettings` generated and applied against `PFP_Procurement` |
 | `Identity/CurrentUserService.cs`, `Identity/PasswordHasher.cs`, `Identity/JwtTokenService.cs` | Implemented |
-| `Email/SmtpEmailService.cs` | Implemented |
+| `Email/SmtpEmailService.cs` | Implemented — reads `EmailSettings` from the database per-send |
+| `Security/DataProtectionSecretProtector.cs` | Implemented |
 | `Integrations/AutoCount/MockAutoCountService.cs` | Implemented, registered as `IAutoCountService` |
 | `Integrations/AutoCount/AutoCountService.cs` | Scaffold only — pending AutoCount's real API contract |
-| `Options/AutoCountApiOptions.cs`, `Options/EmailOptions.cs`, `Options/JwtOptions.cs` | Implemented |
-| `DependencyInjection.cs` | Implemented — registers database, all repositories + `UnitOfWork`, identity services, email, document numbers, and AutoCount (currently the mock). Called from `PFP.Host/Program.cs` as `AddInfrastructureServices(builder.Configuration)`, alongside `AddHttpContextAccessor()`. |
+| `Options/AutoCountApiOptions.cs`, `Options/JwtOptions.cs` | Implemented |
+| `DependencyInjection.cs` | Implemented — registers database, all 9 repositories + `UnitOfWork`, identity services, Data Protection + email, document numbers, and AutoCount (currently the mock). Called from `PFP.Host/Program.cs` as `AddInfrastructureServices(builder.Configuration)`, alongside `AddHttpContextAccessor()`. Also exposes `SeedInfrastructureAsync(IServiceProvider)`, called once after `builder.Build()` to run `ApplicationDbContextSeed`. |
 | `Properties/PublishProfiles.cs` | Stray scaffold — see Known Issues, item 4 |
 
-**For anyone about to run this project**: the solution builds and `PFP.Host` can start with the full persistence and identity stack wired up against a real database. Two things still limit what actually works end-to-end: (1) `ApplicationDbContextSeed` has not been implemented, so a fresh database has no `ApprovalSetting` rows yet, which several planned Handlers depend on; (2) most `Features/` Handler bodies in `PFP.Application` are themselves still empty scaffolds (see `Application.md`), so no HTTP endpoint does real work yet even though every layer beneath it compiles and is reachable.
+**For anyone about to run this project**: the solution builds, and `PFP.Host` starts with the full persistence, identity, and seeding pipeline wired up against a real database — confirmed by actually running it and checking the seeded rows. What still limits what actually works end-to-end: most `Features/` Handler bodies in `PFP.Application` are themselves still empty scaffolds (see `Application.md`), so no HTTP endpoint does real work yet even though every layer beneath it compiles, is reachable, and is backed by real data.
 
 ---
 
 ## 9. Known Issues
 
-Found while cross-checking this document against the real source files, and while generating/applying the first migration.
+Found while cross-checking this document against the real source files, and while generating/applying migrations.
 
 | # | Location | Issue |
 |---|---|---|
 | 1 | `ApplicationDbContext.SupplierQuoteCopies` / `PurchaseRequests` / `PurchaseRequestDetails` naming | Resolved — these were previously miscapitalized/misspelled; now correct. |
-| 2 | `ApplicationDbContext` exposes a `DbSet<T>` for all 14 entities, including the 5 child entities | Still open. `Application.md` documents "one repository per aggregate root" specifically so that child entities are only ever reached through their aggregate root's repository. Exposing their `DbSet<T>` directly on the context lets any future code bypass that boundary. Worth deciding deliberately whether to keep these public `DbSet<T>` properties or make them `internal`. |
+| 2 | `ApplicationDbContext` exposed a `DbSet<T>` for all entities, including the 5 child entities | Resolved — the 5 child-entity `DbSet<T>` properties (`PurchaseRequestDetails`, `SupplierQuoteDetails`, `RequestQuotationDetails`, `RQApprovals`, `PurchaseOrderDetails`) are now `internal`, so code outside `PFP.Infrastructure` can only reach them through their aggregate root's repository, matching `Application.md`'s "one repository per aggregate root" design. |
 | 3 | `PFP.Infrastructure/DependencyInjection.cs` | Resolved, with a wrinkle worth recording: the file existed but was a mistaken duplicate of `PFP.Application/DependencyInjection.cs` (wrong namespace `PFP.Application`, wrong method `AddApplicationServices`) — would have caused an ambiguous-call compile error (CS0121) the moment `PFP.Host` referenced both projects. Replaced with the real `PFP.Infrastructure.DependencyInjection.AddInfrastructureServices`. |
 | 4 | `Properties/PublishProfiles.cs` | Still open. A plain scaffolded class, not a folder of `.pubxml` publish profiles as the name and location imply. Delete or replace when deployment is set up. |
 | 5 | `PurchaseRequest.RequestQuotations` / `RequestQuotation.PurchaseOrder` cardinality | Resolved — both are now single nullable navigation properties in the C# entities, and the applied migration carries real `UNIQUE` indexes enforcing 1:0-or-1 at the database level (`IX_requestquotations_PurchaseRequestId`, `IX_purchaseorders_RequestQuotationId`). See Section 3. |
-| 6 | `ApplicationDbContextSeed.cs` is still an empty stub | The database now exists but has no seeded data. At minimum, needs the two mandatory `ApprovalSetting` rows (`L1`, `L2`) — several Handlers resolve `ApproverRole` through them. `SequentialDocumentNumberGenerator` also has a safety-net path for a missing `Counter` row, but seeding `PR`/`RQ`/`PO` rows here upfront would make that path dead code in practice rather than a real fallback. |
+| 6 | `ApplicationDbContextSeed.cs` was an empty stub | Resolved — implemented and verified against the real database with `sqlcmd`. Seeds `ApprovalSetting` (`L1`/`L2`), `Counter` (`PR`/`RQ`/`PO`), and `EmailSettings` (the single `Id = 1` row). |
 | 7 | `.WithMany()` with no argument, where the "one" side has a real collection navigation | Found and fixed. `PurchaseOrderConfiguration.cs` and `RequestQuotationConfiguration.cs` both configured their `Supplier` relationship with an unnamed `.WithMany()`, even though `Supplier.PurchaseOrders`/`Supplier.RequestQuotations` are real collections. EF Core's model validation caught it as a warning (`SupplierId1` shadow property created) during `dotnet ef migrations add`; fixed by pointing both at the real navigation. See Section 7's convention table. |
-| 8 | `ItemConfiguration.cs` mapped to table `itmes` | Resolved — plain typo, caught while reading the generated `CREATE TABLE` SQL during migration application; fixed to `items` before the database was created, so no rename migration was needed. |
+| 8 | `ItemConfiguration.cs` mapped to table `itmes`, and separately configured `Item.Code` twice instead of configuring `Item.Name` | Resolved — the table-name typo was caught reading the generated `CREATE TABLE` SQL; the `Code`/`Name` copy-paste bug (which left `Name` at EF's default `nvarchar(max)` instead of a bounded column) was caught later while refreshing this document against the applied migration. Both fixed before real data existed, so no rename/alter migration was needed for either. |
+| 9 | `EmailSettings.Id` would have been treated as an `IDENTITY` column | Found and fixed before the table was ever created. The design requires `Id` to always be exactly `1`, set explicitly by the seed — EF Core's default convention for an `int` PK would otherwise silently discard that explicit value and let the database generate its own. Fixed with `.Property(x => x.Id).ValueGeneratedNever()`; see Section 7's convention table. |
+| 10 | `ApplicationDbContextSeed.cs`'s `ApprovalSetting` rows were missing `ApproverRole`/`MinAmount`/`MaxAmount` | Found and fixed. Both `L1` and `L2` would have silently defaulted to `ApproverRole = Role.Requester` (enum default) with identical `MinAmount = 0`/`MaxAmount = null`, defeating the "2-tier amount-based" design entirely. Seeded with placeholder thresholds (`L1`: `DirectorL1`, 0–10,000; `L2`: `DirectorL2`, 10,000+) — the Scope Document's Assumptions section notes the client must supply the real amounts. |
 
-Item 2 is an architectural decision that should be made before more `Features/` handlers start depending on the current `DbSet<T>` surface. Item 4 is housekeeping. Item 6 blocks a genuinely fresh environment from working correctly (not just a cosmetic gap now that the database is real).
+Item 4 is housekeeping. Everything else in this table is resolved as of this writing.
 
 ---
 
 ## 10. Project Dependencies
 
 - `ProjectReference` -> `PFP.Application`
-- `FrameworkReference` -> `Microsoft.AspNetCore.App` (needed for `IHttpContextAccessor`/`HttpContext` in `CurrentUserService`; also makes `Microsoft.Extensions.Identity.Core`'s `PasswordHasher<T>` available without a separate package reference)
+- `FrameworkReference` -> `Microsoft.AspNetCore.App` (needed for `IHttpContextAccessor`/`HttpContext` in `CurrentUserService`, the Data Protection API in `DataProtectionSecretProtector`; also makes `Microsoft.Extensions.Identity.Core`'s `PasswordHasher<T>` available without a separate package reference)
 - NuGet: `Microsoft.EntityFrameworkCore` 9.0.9, `Microsoft.EntityFrameworkCore.Design` 9.0.9, `Microsoft.EntityFrameworkCore.SqlServer` 9.0.9, `System.IdentityModel.Tokens.Jwt` 8.5.0
 - Global tool: `dotnet-ef` 9.0.9 (must be kept in step with the EF Core package version above)
 - Cross-project note: `PFP.Host.csproj` also needs its own `Microsoft.EntityFrameworkCore.Design` reference and a `ProjectReference` to `PFP.Infrastructure` — `dotnet ef` requires the Design package on the startup project specifically, not only on the project holding the `DbContext`. See Section 6.

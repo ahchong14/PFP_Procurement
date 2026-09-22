@@ -22,25 +22,27 @@ public sealed class ApplicationDbContext(
 
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
 
-    public DbSet<PurchaseRequestDetail> PurchaseRequestDetails => Set<PurchaseRequestDetail>();
+    internal DbSet<PurchaseRequestDetail> PurchaseRequestDetails => Set<PurchaseRequestDetail>();
 
     public DbSet<SupplierQuoteCopy> SupplierQuoteCopies => Set<SupplierQuoteCopy>();
 
-    public DbSet<SupplierQuoteDetail> SupplierQuoteDetails => Set<SupplierQuoteDetail>();
+    internal DbSet<SupplierQuoteDetail> SupplierQuoteDetails => Set<SupplierQuoteDetail>();
 
     public DbSet<RequestQuotation> RequestQuotations => Set<RequestQuotation>();
 
-    public DbSet<RequestQuotationDetail> RequestQuotationDetails => Set<RequestQuotationDetail>();
+    internal DbSet<RequestQuotationDetail> RequestQuotationDetails => Set<RequestQuotationDetail>();
 
-    public DbSet<RQApproval> RQApprovals => Set<RQApproval>();
+    internal DbSet<RQApproval> RQApprovals => Set<RQApproval>();
 
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
 
-    public DbSet<PurchaseOrderDetail> PurchaseOrderDetails => Set<PurchaseOrderDetail>();
+    internal DbSet<PurchaseOrderDetail> PurchaseOrderDetails => Set<PurchaseOrderDetail>();
 
     public DbSet<ApprovalSetting> ApprovalSettings => Set<ApprovalSetting>();
 
     public DbSet<Counter> Counters => Set<Counter>();
+
+    public DbSet<EmailSettings> EmailSettings => Set<EmailSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
